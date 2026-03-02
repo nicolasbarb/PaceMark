@@ -73,6 +73,7 @@ struct ElevationProfileView: View {
     let milestones: [Milestone]
     @Binding var cursorPointIndex: Int?
     let onTap: (Int) -> Void
+    var isCompact: Bool = false
 
     @State private var dragLocation: CGPoint?
     @State private var tooltipData: TooltipData?
@@ -98,25 +99,27 @@ struct ElevationProfileView: View {
                     .ignoresSafeArea()
 
                 VStack(spacing: 0) {
-                    // Mini header
-                    HStack {
-                        Text("PROFIL")
-                            .font(.system(.caption2, design: .monospaced, weight: .semibold))
-                            .tracking(1)
-                            .foregroundStyle(TM.textMuted)
+                    // Mini header - masque en mode compact
+                    if !isCompact {
+                        HStack {
+                            Text("PROFIL")
+                                .font(.system(.caption2, design: .monospaced, weight: .semibold))
+                                .tracking(1)
+                                .foregroundStyle(TM.textMuted)
 
-                        Spacer()
+                            Spacer()
 
-                        Text("Tap = repère")
-                            .font(.system(size: 9))
-                            .foregroundStyle(TM.textMuted)
+                            Text("Tap = repère")
+                                .font(.system(size: 9))
+                                .foregroundStyle(TM.textMuted)
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+
+                        Rectangle()
+                            .fill(Color.white.opacity(0.04))
+                            .frame(height: 1)
                     }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-
-                    Rectangle()
-                        .fill(Color.white.opacity(0.04))
-                        .frame(height: 1)
 
                     // Canvas
                     GeometryReader { geometry in
@@ -132,6 +135,11 @@ struct ElevationProfileView: View {
                                         case .changed:
                                             handleDrag(location: location, size: geometry.size)
                                         case .ended, .cancelled:
+                                            // Ajouter le repère à la position du curseur
+                                            if let index = cursorPointIndex {
+                                                Haptic.medium.trigger()
+                                                onTap(index)
+                                            }
                                             clearCursor()
                                         default:
                                             break
