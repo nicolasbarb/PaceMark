@@ -10,20 +10,29 @@ struct ScrollableElevationProfileView: View {
     var body: some View {
         GeometryReader { geometry in
             let horizontalPadding = geometry.size.width / 2
+            let totalWidth = horizontalPadding * 2 + CGFloat(trackPoints.count) * pointSpacing
 
             ZStack {
-                // Background
                 TM.bgSecondary
 
-                // Scrollable profile
                 ScrollView(.horizontal, showsIndicators: false) {
-                    Canvas { context, size in
-                        drawProfile(context: context, size: size, horizontalPadding: horizontalPadding)
+                    ZStack(alignment: .leading) {
+                        // Canvas for drawing
+                        Canvas { context, size in
+                            drawProfile(context: context, size: size, horizontalPadding: horizontalPadding)
+                        }
+                        .frame(width: totalWidth, height: geometry.size.height)
+
+                        // Invisible scroll anchors
+                        LazyHStack(spacing: 0) {
+                            ForEach(0..<trackPoints.count, id: \.self) { index in
+                                Color.clear
+                                    .frame(width: pointSpacing, height: 1)
+                                    .id(index)
+                            }
+                        }
+                        .padding(.leading, horizontalPadding - pointSpacing / 2)
                     }
-                    .frame(
-                        width: horizontalPadding * 2 + CGFloat(trackPoints.count) * pointSpacing,
-                        height: geometry.size.height
-                    )
                     .scrollTargetLayout()
                 }
                 .scrollPosition(id: Binding(
@@ -31,8 +40,8 @@ struct ScrollableElevationProfileView: View {
                     set: { if let newValue = $0 { scrolledPointIndex = newValue } }
                 ))
                 .scrollTargetBehavior(.viewAligned)
+                .defaultScrollAnchor(.center)
 
-                // Center marker overlay (fixed)
                 CenterMarkerView()
             }
         }
