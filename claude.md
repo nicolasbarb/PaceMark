@@ -8,7 +8,7 @@ Ce n'est PAS un tracker de course. Pas de chrono, pas de vitesse, pas de record.
 
 ## Stack
 
-- **iOS 18.0 minimum**, Swift 6, SwiftUI
+- **iOS 26.0 minimum**, Swift 6, SwiftUI
 - **Architecture** : The Composable Architecture (TCA) — `pointfreeco/swift-composable-architecture` 1.17+
 - **Base de données** : SQLite-Data — `pointfreeco/sqlite-data` (SQLite avec StructuredQueries)
 - **Cartographie** : MapKit natif (gratuit, pas de clé API)
@@ -51,7 +51,7 @@ TrailMark/
 ## Règles de code
 
 ### Swift & SwiftUI
-- iOS 18 minimum : utiliser les API les plus récentes (MapKit SwiftUI, Observable, etc.)
+- iOS 26 minimum : utiliser les API les plus récentes (MapKit SwiftUI, Observable, etc.)
 - `@Observable` / `@ObservableState` (TCA) — jamais `ObservableObject` / `@Published`
 - Structured concurrency (async/await, AsyncStream) — pas de Combine
 - `NavigationStack` — jamais `NavigationView`
