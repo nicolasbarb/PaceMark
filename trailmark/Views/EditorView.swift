@@ -12,6 +12,100 @@ struct MiniProfileDetent: CustomPresentationDetent {
     }
 }
 
+// MARK: - Editor Sheet Content
+
+private struct EditorSheetContent: View {
+    @Bindable var store: StoreOf<EditorFeature>
+    let detail: TrailDetail
+    @Binding var selectedTab: EditorView.EditorTab
+    @Binding var selectedDetent: PresentationDetent
+
+    var body: some View {
+        VStack(spacing: 0) {
+            // Header avec nom du parcours
+            headerView
+
+            // Picker Profil / Reperes
+            pickerView
+
+            // Mini profil (toujours visible)
+            ElevationProfileView(
+                trackPoints: detail.trackPoints,
+                milestones: store.milestones,
+                cursorPointIndex: Binding(
+                    get: { store.cursorPointIndex },
+                    set: { store.send(.cursorMoved($0)) }
+                ),
+                onTap: { index in
+                    store.send(.profileTapped(index))
+                },
+                isCompact: true
+            )
+            .frame(height: 80)
+
+            // Liste des reperes (si expanded)
+            if selectedDetent == .large {
+                Divider()
+                    .background(TM.border)
+
+                ReperesContentView(store: store)
+            }
+        }
+        .onChange(of: selectedTab) { _, newTab in
+            withAnimation(.snappy(duration: 0.3)) {
+                selectedDetent = newTab == .reperes ? .large : .custom(MiniProfileDetent.self)
+            }
+        }
+        .onChange(of: selectedDetent) { _, newDetent in
+            withAnimation(.snappy(duration: 0.2)) {
+                selectedTab = newDetent == .large ? .reperes : .profil
+            }
+        }
+    }
+
+    private var headerView: some View {
+        VStack(spacing: 2) {
+            Text(detail.trail.name)
+                .font(.headline)
+                .foregroundStyle(TM.textPrimary)
+
+            TrailStatsView(distanceKm: detail.distKm, dPlus: detail.trail.dPlus)
+        }
+        .padding(.vertical, 12)
+    }
+
+    private var pickerView: some View {
+        HStack(spacing: 8) {
+            ForEach(EditorView.EditorTab.allCases, id: \.self) { tab in
+                Button {
+                    Haptic.light.trigger()
+                    selectedTab = tab
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: tab == .profil ? "chart.xyaxis.line" : "mappin.and.ellipse")
+                            .font(.system(size: 12, weight: .semibold))
+                        Text(tab == .reperes ? "\(tab.rawValue) (\(store.milestones.count))" : tab.rawValue)
+                            .font(.system(size: 13, weight: .semibold))
+                    }
+                    .foregroundStyle(selectedTab == tab ? TM.textPrimary : TM.textSecondary)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 8)
+                    .background(
+                        selectedTab == tab ? TM.accent.opacity(0.15) : Color.clear,
+                        in: Capsule()
+                    )
+                    .overlay(
+                        Capsule()
+                            .stroke(selectedTab == tab ? TM.accent : TM.border, lineWidth: 1)
+                    )
+                }
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.bottom, 12)
+    }
+}
+
 struct EditorView: View {
     @Bindable var store: StoreOf<EditorFeature>
 
@@ -36,68 +130,15 @@ struct EditorView: View {
                 )
                 .ignoresSafeArea()
                 .sheet(isPresented: .constant(true)) {
-                    VStack(spacing: 0) {
-                        // Header toolbar (toujours visible)
-                        HStack {
-                            Button {
-                                Haptic.light.trigger()
-                                selectedDetent = .large
-                            } label: {
-                                Text("Repères")
-                                    .font(.subheadline.weight(.medium))
-                                    .foregroundStyle(selectedDetent == .large ? TM.accent : TM.textPrimary)
-                                    .padding(.horizontal, 16)
-                                    .padding(.vertical, 8)
-                                    .background(TM.bgPrimary, in: Capsule())
-                            }
-
-                            Spacer()
-
-                            VStack(spacing: 2) {
-                                Text(detail.trail.name)
-                                    .font(.headline)
-                                    .foregroundStyle(TM.textPrimary)
-
-                                TrailStatsView(distanceKm: detail.distKm, dPlus: detail.trail.dPlus)
-                            }
-
-                            Spacer()
-
-                            Button {
-                                Haptic.light.trigger()
-                                selectedDetent = profilHeight
-                            } label: {
-                                Text("Profil")
-                                    .font(.subheadline.weight(.medium))
-                                    .foregroundStyle(selectedDetent == profilHeight ? TM.accent : TM.textPrimary)
-                                    .padding(.horizontal, 16)
-                                    .padding(.vertical, 8)
-                                    .background(TM.bgPrimary, in: Capsule())
-                            }
-                        }
-                        .padding(.horizontal, 16)
-                        .frame(height: 60)
-
-                        // Contenu dynamique
-                        if selectedDetent == .large {
-                            ReperesContentView(store: store)
-                        } else if selectedDetent == profilHeight {
-                            ElevationProfileView(
-                                trackPoints: detail.trackPoints,
-                                milestones: store.milestones,
-                                cursorPointIndex: Binding(
-                                    get: { store.cursorPointIndex },
-                                    set: { store.send(.cursorMoved($0)) }
-                                ),
-                                onTap: { index in
-                                    store.send(.profileTapped(index))
-                                }
-                            )
-                        }
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-                    .presentationDetents([.height(80), profilHeight, .large], selection: $selectedDetent)
-                    .presentationBackgroundInteraction(.enabled(upThrough: profilHeight))
+                    EditorSheetContent(
+                        store: store,
+                        detail: detail,
+                        selectedTab: $selectedTab,
+                        selectedDetent: $selectedDetent
+                    )
+                    .presentationDetents([.custom(MiniProfileDetent.self), .large], selection: $selectedDetent)
+                    .presentationBackgroundInteraction(.enabled(upThrough: .custom(MiniProfileDetent.self)))
+                    .presentationDragIndicator(.hidden)
                     .presentationBackground(TM.bgSecondary)
                     .interactiveDismissDisabled()
                     .sheet(
