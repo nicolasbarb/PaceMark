@@ -131,7 +131,7 @@ struct EditorView: View {
             Haptic.medium.trigger()
             store.send(.profileTapped(store.scrolledPointIndex))
         } label: {
-            Label("Ajouter un repere", systemImage: "plus.circle.fill")
+            Label("Ajouter un repère", systemImage: "plus.circle.fill")
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(.white)
                 .frame(maxWidth: .infinity)
