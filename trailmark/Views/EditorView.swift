@@ -15,8 +15,13 @@ struct MiniProfileDetent: CustomPresentationDetent {
 struct EditorView: View {
     @Bindable var store: StoreOf<EditorFeature>
 
-    private let profilHeight: PresentationDetent = .height(300)
-    @State private var selectedDetent: PresentationDetent = .height(80)
+    @State private var selectedDetent: PresentationDetent = .custom(MiniProfileDetent.self)
+
+    enum EditorTab: String, CaseIterable {
+        case profil = "Profil"
+        case reperes = "Repères"
+    }
+    @State private var selectedTab: EditorTab = .profil
 
     var body: some View {
         ZStack(alignment: .bottom) {
