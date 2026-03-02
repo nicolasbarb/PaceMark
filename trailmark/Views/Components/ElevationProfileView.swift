@@ -140,7 +140,7 @@ struct ElevationProfileView: View {
                                                 Haptic.medium.trigger()
                                                 onTap(index)
                                             }
-                                            clearCursor()
+                                            clearDragState()
                                         default:
                                             break
                                         }
@@ -192,9 +192,9 @@ struct ElevationProfileView: View {
         // Draw milestone markers
         drawMilestones(context: context, plotRect: plotRect, minEle: minEle, eleRange: eleRange, maxDist: maxDist)
 
-        // Draw cursor
-        if let index = cursorPointIndex, let location = dragLocation {
-            drawCursor(context: context, plotRect: plotRect, x: location.x, index: index, minEle: minEle, eleRange: eleRange, maxDist: maxDist)
+        // Draw cursor (basé uniquement sur cursorPointIndex)
+        if let index = cursorPointIndex {
+            drawCursor(context: context, plotRect: plotRect, index: index, minEle: minEle, eleRange: eleRange, maxDist: maxDist)
         }
     }
 
@@ -308,9 +308,10 @@ struct ElevationProfileView: View {
         }
     }
 
-    private func drawCursor(context: GraphicsContext, plotRect: CGRect, x: CGFloat, index: Int, minEle: Double, eleRange: Double, maxDist: Double) {
+    private func drawCursor(context: GraphicsContext, plotRect: CGRect, index: Int, minEle: Double, eleRange: Double, maxDist: Double) {
         guard index < trackPoints.count else { return }
         let point = trackPoints[index]
+        // Calculer la position X à partir de l'index (pas besoin de dragLocation)
         let pointX = plotRect.minX + CGFloat(point.distance / maxDist) * plotRect.width
         let pointY = plotRect.maxY - CGFloat((point.elevation - minEle) / eleRange) * plotRect.height
 
@@ -406,11 +407,11 @@ struct ElevationProfileView: View {
         onTap(index)
     }
 
-    private func clearCursor() {
+    private func clearDragState() {
         dragLocation = nil
-        cursorPointIndex = nil
         tooltipData = nil
         lastHapticIndex = nil
+        // Note: cursorPointIndex n'est PAS effacé pour garder la sync avec la carte
     }
 
     private func findClosestPointIndex(distance: Double) -> Int {
