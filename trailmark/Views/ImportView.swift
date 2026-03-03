@@ -368,8 +368,8 @@ private struct ElevationProfilePreview: View {
         let eleRange = max(maxEle - minEle, 1)
         let maxDist = trackPoints.last?.distance ?? 1
 
-        // Use shared TrailProfileAnalyzer
-        let terrainTypes = TrailProfileAnalyzer.classify(trackPoints: trackPoints)
+        // Use shared ElevationProfileAnalyzer
+        let terrainTypes = ElevationProfileAnalyzer.classify(trackPoints: trackPoints)
 
         // Draw colored segments
         drawColoredSegments(context: context, plotRect: plotRect, minEle: minEle, eleRange: eleRange, maxDist: maxDist, terrainTypes: terrainTypes)

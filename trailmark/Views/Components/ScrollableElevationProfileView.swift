@@ -120,8 +120,8 @@ private struct ProfileImageRenderer {
         let points = subsampledPoints
         guard points.count >= 2 else { return }
 
-        // Use shared TrailProfileAnalyzer
-        let terrainTypes = TrailProfileAnalyzer.classify(trackPoints: trackPoints)
+        // Use shared ElevationProfileAnalyzer
+        let terrainTypes = ElevationProfileAnalyzer.classify(trackPoints: trackPoints)
 
         // Draw colored segments
         for i in 1..<points.count {
