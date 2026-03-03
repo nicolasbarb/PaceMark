@@ -345,23 +345,6 @@ private struct ElevationProfilePreview: View {
     private let paddingLeft: CGFloat = 10
     private let paddingRight: CGFloat = 10
 
-    // Terrain detection settings (same as ScrollableElevationProfileView)
-    private let slopeThreshold: Double = 0.05
-    private let slopeWindowSize: Double = 500
-    private let minSegmentLength: Double = 200
-
-    private enum TerrainType {
-        case climbing, descending, flat
-
-        var color: Color {
-            switch self {
-            case .climbing: return MilestoneType.montee.color
-            case .descending: return MilestoneType.descente.color
-            case .flat: return MilestoneType.plat.color
-            }
-        }
-    }
-
     var body: some View {
         Canvas { context, size in
             drawProfile(context: context, size: size)
@@ -385,90 +368,14 @@ private struct ElevationProfilePreview: View {
         let eleRange = max(maxEle - minEle, 1)
         let maxDist = trackPoints.last?.distance ?? 1
 
-        // Compute terrain types
-        let terrainTypes = computeTerrainTypes()
+        // Use shared TrailProfileAnalyzer
+        let terrainTypes = TrailProfileAnalyzer.classify(trackPoints: trackPoints)
 
         // Draw colored segments
         drawColoredSegments(context: context, plotRect: plotRect, minEle: minEle, eleRange: eleRange, maxDist: maxDist, terrainTypes: terrainTypes)
 
         // Draw milestone markers
         drawMilestones(context: context, plotRect: plotRect, minEle: minEle, eleRange: eleRange, maxDist: maxDist)
-    }
-
-    private func computeTerrainTypes() -> [TerrainType] {
-        guard trackPoints.count >= 2 else { return [] }
-
-        var terrainTypes = [TerrainType](repeating: .flat, count: trackPoints.count)
-        let halfWindow = slopeWindowSize / 2
-
-        // First pass: compute raw terrain types
-        for i in 0..<trackPoints.count {
-            let currentPoint = trackPoints[i]
-            let currentDistance = currentPoint.distance
-
-            var startIdx = i
-            var endIdx = i
-
-            for j in (0..<i).reversed() {
-                if currentDistance - trackPoints[j].distance <= halfWindow {
-                    startIdx = j
-                } else {
-                    break
-                }
-            }
-
-            for j in (i + 1)..<trackPoints.count {
-                if trackPoints[j].distance - currentDistance <= halfWindow {
-                    endIdx = j
-                } else {
-                    break
-                }
-            }
-
-            let startPoint = trackPoints[startIdx]
-            let endPoint = trackPoints[endIdx]
-
-            let distanceDelta = endPoint.distance - startPoint.distance
-            guard distanceDelta > 0 else {
-                terrainTypes[i] = .flat
-                continue
-            }
-
-            let slope = (endPoint.elevation - startPoint.elevation) / distanceDelta
-
-            if slope > slopeThreshold {
-                terrainTypes[i] = .climbing
-            } else if slope < -slopeThreshold {
-                terrainTypes[i] = .descending
-            } else {
-                terrainTypes[i] = .flat
-            }
-        }
-
-        // Second pass: remove small segments
-        var i = 0
-        while i < trackPoints.count {
-            let segmentStart = i
-            let segmentType = terrainTypes[i]
-
-            var segmentEnd = i
-            while segmentEnd < trackPoints.count && terrainTypes[segmentEnd] == segmentType {
-                segmentEnd += 1
-            }
-
-            let segmentLength = trackPoints[min(segmentEnd, trackPoints.count - 1)].distance - trackPoints[segmentStart].distance
-
-            if segmentLength < minSegmentLength && segmentStart > 0 {
-                let prevType = terrainTypes[segmentStart - 1]
-                for j in segmentStart..<segmentEnd {
-                    terrainTypes[j] = prevType
-                }
-            }
-
-            i = segmentEnd
-        }
-
-        return terrainTypes
     }
 
     private func drawColoredSegments(context: GraphicsContext, plotRect: CGRect, minEle: Double, eleRange: Double, maxDist: Double, terrainTypes: [TerrainType]) {
