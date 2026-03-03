@@ -4,6 +4,7 @@ import ComposableArchitecture
 struct EditorView: View {
     @Bindable var store: StoreOf<EditorFeature>
     @State private var scrollToIndex: Int?
+    @State private var profileStatsData: ProfileStatsData?
 
     var body: some View {
         ZStack {
@@ -40,10 +41,11 @@ struct EditorView: View {
                     Divider()
                         .background(TM.bgTertiary)
 
-                    // Stats for current point
-                    if store.scrolledPointIndex < detail.trackPoints.count {
+                    // Stats for current point (O(1) lookups from pre-computed data)
+                    if let statsData = profileStatsData,
+                       store.scrolledPointIndex < statsData.trackPoints.count {
                         ProfileStatsView(
-                            trackPoints: detail.trackPoints,
+                            statsData: statsData,
                             currentIndex: store.scrolledPointIndex
                         )
                     }
@@ -107,6 +109,18 @@ struct EditorView: View {
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
             store.send(.onAppear)
+        }
+        .onChange(of: store.trailDetail?.trackPoints.count) { _, newCount in
+            if let count = newCount, count > 0,
+               let detail = store.trailDetail {
+                profileStatsData = ProfileStatsData(trackPoints: detail.trackPoints)
+            }
+        }
+        .task(id: store.trailDetail?.trail.id) {
+            // Compute stats data when detail becomes available
+            if let detail = store.trailDetail {
+                profileStatsData = ProfileStatsData(trackPoints: detail.trackPoints)
+            }
         }
         .sheet(
             item: $store.scope(state: \.milestoneSheet, action: \.milestoneSheet)
