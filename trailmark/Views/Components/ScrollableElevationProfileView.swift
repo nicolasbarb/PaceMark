@@ -324,7 +324,6 @@ struct ScrollableElevationProfileView: View {
     // Non-state tracking (doesn't trigger SwiftUI updates)
     private static var _currentOffset: CGFloat = 0
     private static var _pendingIndex: Int = 0
-    private static var _lastHapticIndex: Int = 0
     private static var _lastHapticMilestoneId: Int64? = nil
     private static var _lastSyncedIndex: Int = 0
 
@@ -364,14 +363,15 @@ struct ScrollableElevationProfileView: View {
                     let clampedIndex = max(0, min(index, trackPoints.count - 1))
                     Self._pendingIndex = clampedIndex
 
-                    // Haptic feedback
-                    triggerHapticIfNeeded(newIndex: clampedIndex)
-
-                    // Sync to mini profile every 50 points (throttled for performance)
-                    if abs(clampedIndex - Self._lastSyncedIndex) >= 50 {
+                    // Sync stats + haptic every 20 points (now cheap thanks to pre-computed data)
+                    if abs(clampedIndex - Self._lastSyncedIndex) >= 20 {
                         scrolledPointIndex = clampedIndex
                         Self._lastSyncedIndex = clampedIndex
+                        Haptic.light.trigger()
                     }
+
+                    // Medium haptic on milestone crossing
+                    triggerMilestoneHaptic(newIndex: clampedIndex)
                 }
                 // Detect scroll phase to know when scrolling stops
                 .onScrollPhaseChange { oldPhase, newPhase in
@@ -474,22 +474,14 @@ struct ScrollableElevationProfileView: View {
         return nil
     }
 
-    // MARK: - Haptic feedback (no SwiftUI state update)
+    // MARK: - Milestone haptic feedback
 
-    private func triggerHapticIfNeeded(newIndex: Int) {
-        // Light haptic every 20 points
-        if abs(newIndex - Self._lastHapticIndex) >= 20 {
-            Haptic.light.trigger()
-            Self._lastHapticIndex = newIndex
-        }
-
-        // Medium haptic on milestone crossing
+    private func triggerMilestoneHaptic(newIndex: Int) {
         for milestone in milestones {
             let distance = abs(milestone.pointIndex - newIndex)
             if distance <= 1 && milestone.id != Self._lastHapticMilestoneId {
                 Haptic.medium.trigger()
                 Self._lastHapticMilestoneId = milestone.id
-                Self._lastHapticIndex = newIndex
                 return
             }
         }
