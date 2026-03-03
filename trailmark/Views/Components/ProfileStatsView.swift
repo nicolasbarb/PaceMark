@@ -14,12 +14,6 @@ final class ProfileStatsData {
     let segmentIndices: [Int] // Maps each point to its segment index
     let segments: [SegmentData]
 
-    // Settings
-    private let slopeThreshold: Double = 0.05
-    private let slopeWindowSize: Double = 500
-    private let minSegmentLength: Double = 200
-    private let slopeCalcWindow: Double = 100
-
     init(trackPoints: [TrackPoint]) {
         self.trackPoints = trackPoints
 
@@ -48,32 +42,29 @@ final class ProfileStatsData {
         self.cumulativeDPlus = dPlusArray
         self.cumulativeDMinus = dMinusArray
 
-        // Pre-compute slopes
+        // Pre-compute slopes using TrailProfileAnalyzer
         var slopes = [Int]()
         slopes.reserveCapacity(trackPoints.count)
 
         for i in 0..<trackPoints.count {
-            let slope = ProfileStatsData.computeSlope(
-                at: i,
-                trackPoints: trackPoints,
-                windowSize: slopeCalcWindow
-            )
+            let slope = TrailProfileAnalyzer.computeSlope(at: i, trackPoints: trackPoints)
             slopes.append(Int(slope * 100))
         }
         self.slopePercent = slopes
 
-        // Pre-compute terrain types with smoothing
-        let rawTerrainTypes = ProfileStatsData.computeTerrainTypes(
-            trackPoints: trackPoints,
-            slopeThreshold: slopeThreshold,
-            windowSize: slopeWindowSize,
-            minSegmentLength: minSegmentLength
-        )
+        // Pre-compute terrain types using TrailProfileAnalyzer
+        let rawTerrainTypes = TrailProfileAnalyzer.classify(trackPoints: trackPoints)
         self.terrainTypes = rawTerrainTypes
 
         // Pre-compute segments
         var segmentList = [SegmentData]()
         var segmentIndexMap = [Int](repeating: 0, count: trackPoints.count)
+
+        guard !rawTerrainTypes.isEmpty else {
+            self.segments = []
+            self.segmentIndices = []
+            return
+        }
 
         var i = 0
         while i < trackPoints.count {
@@ -122,109 +113,6 @@ final class ProfileStatsData {
         self.segmentIndices = segmentIndexMap
     }
 
-    private static func computeSlope(at index: Int, trackPoints: [TrackPoint], windowSize: Double) -> Double {
-        guard index > 0, trackPoints.count > 1 else { return 0 }
-
-        let halfWindow = windowSize / 2
-        let currentDistance = trackPoints[index].distance
-
-        var startIdx = index
-        var endIdx = index
-
-        for j in (0..<index).reversed() {
-            if currentDistance - trackPoints[j].distance <= halfWindow {
-                startIdx = j
-            } else {
-                break
-            }
-        }
-
-        for j in (index + 1)..<trackPoints.count {
-            if trackPoints[j].distance - currentDistance <= halfWindow {
-                endIdx = j
-            } else {
-                break
-            }
-        }
-
-        let distanceDelta = trackPoints[endIdx].distance - trackPoints[startIdx].distance
-        guard distanceDelta > 0 else { return 0 }
-
-        return (trackPoints[endIdx].elevation - trackPoints[startIdx].elevation) / distanceDelta
-    }
-
-    private static func computeTerrainTypes(
-        trackPoints: [TrackPoint],
-        slopeThreshold: Double,
-        windowSize: Double,
-        minSegmentLength: Double
-    ) -> [TerrainType] {
-        guard trackPoints.count >= 2 else { return [] }
-
-        var terrainTypes = [TerrainType](repeating: .flat, count: trackPoints.count)
-        let halfWindow = windowSize / 2
-
-        // First pass: compute raw terrain types
-        for i in 0..<trackPoints.count {
-            let currentDistance = trackPoints[i].distance
-
-            var startIdx = i
-            var endIdx = i
-
-            for j in (0..<i).reversed() {
-                if currentDistance - trackPoints[j].distance <= halfWindow {
-                    startIdx = j
-                } else {
-                    break
-                }
-            }
-
-            for j in (i + 1)..<trackPoints.count {
-                if trackPoints[j].distance - currentDistance <= halfWindow {
-                    endIdx = j
-                } else {
-                    break
-                }
-            }
-
-            let distanceDelta = trackPoints[endIdx].distance - trackPoints[startIdx].distance
-            guard distanceDelta > 0 else { continue }
-
-            let slope = (trackPoints[endIdx].elevation - trackPoints[startIdx].elevation) / distanceDelta
-
-            if slope > slopeThreshold {
-                terrainTypes[i] = .climbing
-            } else if slope < -slopeThreshold {
-                terrainTypes[i] = .descending
-            }
-        }
-
-        // Second pass: remove small segments
-        var i = 0
-        while i < trackPoints.count {
-            let segmentStart = i
-            let segmentType = terrainTypes[i]
-
-            var segmentEnd = i
-            while segmentEnd < trackPoints.count && terrainTypes[segmentEnd] == segmentType {
-                segmentEnd += 1
-            }
-
-            let segmentLength = trackPoints[min(segmentEnd, trackPoints.count - 1)].distance - trackPoints[segmentStart].distance
-
-            if segmentLength < minSegmentLength && segmentStart > 0 {
-                let prevType = terrainTypes[segmentStart - 1]
-                for j in segmentStart..<segmentEnd {
-                    terrainTypes[j] = prevType
-                }
-            }
-
-            i = segmentEnd
-        }
-
-        return terrainTypes
-    }
-
     struct SegmentData {
         let startIndex: Int
         let endIndex: Int
@@ -232,18 +120,6 @@ final class ProfileStatsData {
         let distance: Double
         let elevationChange: Int
         let avgSlopePercent: Int
-    }
-}
-
-enum TerrainType: Equatable {
-    case climbing, descending, flat
-
-    var color: Color {
-        switch self {
-        case .climbing: return MilestoneType.montee.color
-        case .descending: return MilestoneType.descente.color
-        case .flat: return MilestoneType.plat.color
-        }
     }
 }
 
