@@ -22,7 +22,7 @@ enum TerrainType: Equatable {
 // MARK: - Trail Profile Analyzer
 
 /// Analyzes trail elevation profile to classify terrain segments
-enum TrailProfileAnalyzer {
+enum ElevationProfileAnalyzer {
 
     // MARK: - Configuration
 
