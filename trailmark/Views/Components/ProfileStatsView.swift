@@ -42,18 +42,18 @@ final class ProfileStatsData {
         self.cumulativeDPlus = dPlusArray
         self.cumulativeDMinus = dMinusArray
 
-        // Pre-compute slopes using TrailProfileAnalyzer
+        // Pre-compute slopes using ElevationProfileAnalyzer
         var slopes = [Int]()
         slopes.reserveCapacity(trackPoints.count)
 
         for i in 0..<trackPoints.count {
-            let slope = TrailProfileAnalyzer.computeSlope(at: i, trackPoints: trackPoints)
+            let slope = ElevationProfileAnalyzer.computeSlope(at: i, trackPoints: trackPoints)
             slopes.append(Int(slope * 100))
         }
         self.slopePercent = slopes
 
-        // Pre-compute terrain types using TrailProfileAnalyzer
-        let rawTerrainTypes = TrailProfileAnalyzer.classify(trackPoints: trackPoints)
+        // Pre-compute terrain types using ElevationProfileAnalyzer
+        let rawTerrainTypes = ElevationProfileAnalyzer.classify(trackPoints: trackPoints)
         self.terrainTypes = rawTerrainTypes
 
         // Pre-compute segments
