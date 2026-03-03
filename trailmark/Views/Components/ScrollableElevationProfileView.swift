@@ -98,9 +98,10 @@ private struct ProfileImageRenderer {
             height: height - paddingTop - paddingBottom
         )
 
+        // Compute min/max from ALL points (not subsampled) to avoid missing extremes
         var minEle = Double.infinity
         var maxEle = -Double.infinity
-        for (_, point) in subsampledPoints {
+        for point in trackPoints {
             minEle = min(minEle, point.elevation)
             maxEle = max(maxEle, point.elevation)
         }
@@ -347,6 +348,8 @@ struct ScrollableElevationProfileView: View {
                     if let image = profileImage {
                         Image(uiImage: image)
                             .interpolation(.none)
+                            .resizable()
+                            .frame(height: geometry.size.height)
                     }
                 }
                 .scrollPosition($scrollPosition)
@@ -430,13 +433,24 @@ struct ScrollableElevationProfileView: View {
                 #endif
             }
             .onAppear {
-                renderProfileImage(horizontalPadding: horizontalPadding, height: geometry.size.height)
+                if geometry.size.height > 0 {
+                    renderProfileImage(horizontalPadding: horizontalPadding, height: geometry.size.height)
+                }
+            }
+            .onChange(of: geometry.size.height) { _, newHeight in
+                if newHeight > 0 {
+                    renderProfileImage(horizontalPadding: horizontalPadding, height: newHeight)
+                }
             }
             .onChange(of: trackPoints.count) { _, _ in
-                renderProfileImage(horizontalPadding: horizontalPadding, height: geometry.size.height)
+                if geometry.size.height > 0 {
+                    renderProfileImage(horizontalPadding: horizontalPadding, height: geometry.size.height)
+                }
             }
             .onChange(of: milestones.count) { _, _ in
-                renderProfileImage(horizontalPadding: horizontalPadding, height: geometry.size.height)
+                if geometry.size.height > 0 {
+                    renderProfileImage(horizontalPadding: horizontalPadding, height: geometry.size.height)
+                }
             }
         }
     }

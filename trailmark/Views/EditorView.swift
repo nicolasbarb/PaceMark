@@ -42,8 +42,10 @@ struct EditorView: View {
 
                     // Stats for current point
                     if store.scrolledPointIndex < detail.trackPoints.count {
-                        let point = detail.trackPoints[store.scrolledPointIndex]
-                        currentPointStats(point: point)
+                        ProfileStatsView(
+                            trackPoints: detail.trackPoints,
+                            currentIndex: store.scrolledPointIndex
+                        )
                     }
 
                     // Add milestone button
@@ -115,30 +117,6 @@ struct EditorView: View {
         }
     }
 
-    // MARK: - Current Point Stats
-
-    private func currentPointStats(point: TrackPoint) -> some View {
-        HStack(spacing: 24) {
-            VStack(spacing: 2) {
-                Text("ALTITUDE")
-                    .font(.system(.caption2, design: .monospaced, weight: .semibold))
-                    .foregroundStyle(TM.textMuted)
-                Text("\(Int(point.elevation)) m")
-                    .font(.system(.title3, design: .monospaced, weight: .bold))
-                    .foregroundStyle(TM.textPrimary)
-            }
-
-            VStack(spacing: 2) {
-                Text("DISTANCE")
-                    .font(.system(.caption2, design: .monospaced, weight: .semibold))
-                    .foregroundStyle(TM.textMuted)
-                Text(String(format: "%.2f km", point.distance / 1000))
-                    .font(.system(.title3, design: .monospaced, weight: .bold))
-                    .foregroundStyle(TM.textPrimary)
-            }
-        }
-        .padding(.vertical, 16)
-    }
 
     // MARK: - Add Milestone Button
 
