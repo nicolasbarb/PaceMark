@@ -30,16 +30,13 @@ struct EditorView: View {
                         }
                     )
 
-                    Rectangle()
-                        .fill(TM.bgTertiary)
-                        .frame(height: 1)
-
                     // Scrollable profile (main) with stats overlay
                     ZStack(alignment: .top) {
                         ScrollableElevationProfileView(
                             trackPoints: detail.trackPoints,
                             milestones: store.milestones,
                             editingMilestoneId: highlightedMilestoneId,
+                            statsData: profileStatsData,
                             scrollTarget: $scrollTarget,
                             onScrollIndexChanged: { [scrollIndexHolder] index in
                                 scrollIndexHolder.index = index
@@ -79,10 +76,7 @@ struct EditorView: View {
                         .padding(.horizontal, 12)
                         .allowsHitTesting(false)
                     }
-                    .containerRelativeFrame(.vertical) { height, _ in height * 0.4 }
-
-                    Divider()
-                        .background(TM.bgTertiary)
+                    .containerRelativeFrame(.vertical) { height, _ in height * 0.5 }
 
                     // Stats for current point (isolated wrapper)
                     ScrollView {
@@ -120,20 +114,10 @@ struct EditorView: View {
                 VStack(spacing: 0) {
                     Spacer()
 
-                    // Gradient fade for visual separation
-                    LinearGradient(
-                        colors: [TM.bgPrimary.opacity(0), TM.bgPrimary],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                    .frame(height: 40)
-                    .allowsHitTesting(false)
-
                     // Button container
                     addMilestoneButton
                         .padding(.horizontal, 20)
                         .padding(.bottom, 16)
-                        .background(TM.bgPrimary)
                 }
             } else {
                 ProgressView()
@@ -533,7 +517,6 @@ private struct StatsOverlayWrapper: View {
         if let stats = statsData,
            scrollIndexHolder.index < stats.trackPoints.count {
             ElevationStatsOverlay(
-                altitude: Int(stats.trackPoints[scrollIndexHolder.index].elevation),
                 dPlus: stats.cumulativeDPlus[scrollIndexHolder.index],
                 dMinus: stats.cumulativeDMinus[scrollIndexHolder.index]
             )
@@ -548,10 +531,29 @@ private struct DistanceOverlayWrapper: View {
     var body: some View {
         if let stats = statsData,
            scrollIndexHolder.index < stats.trackPoints.count {
-            DistanceView(meters: stats.trackPoints[scrollIndexHolder.index].distance)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
-                .glassEffect(.regular, in: .capsule)
+            let point = stats.trackPoints[scrollIndexHolder.index]
+            HStack(spacing: 8) {
+                DistanceView(meters: point.distance)
+
+                Rectangle()
+                    .fill(Color.white.opacity(0.08))
+                    .frame(width: 0.5, height: 16)
+
+                HStack(spacing: 4) {
+                    Image(systemName: "mountain.2.fill")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(TM.textTertiary)
+                    Text("\(Int(point.elevation))")
+                        .font(.system(.caption2, design: .monospaced, weight: .bold))
+                        .foregroundStyle(TM.textSecondary)
+                    Text("M")
+                        .font(.system(.caption2, design: .monospaced))
+                        .foregroundStyle(TM.textTertiary)
+                }
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .glassEffect(.regular, in: .capsule)
         }
     }
 }

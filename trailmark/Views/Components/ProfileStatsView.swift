@@ -164,10 +164,6 @@ struct ProfileStatsView: View {
                 )
                 .padding(.horizontal, -16) // Break out of parent padding
             }
-
-            if let segment = currentSegment {
-                kineticTape(segment: segment)
-            }
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
