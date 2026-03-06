@@ -29,7 +29,9 @@ private struct MiniProfileImageRenderer {
         }
         let eleRange = max(maxEle - minEle, 1)
 
-        let renderer = UIGraphicsImageRenderer(size: size)
+        let format = UIGraphicsImageRendererFormat()
+        format.opaque = false
+        let renderer = UIGraphicsImageRenderer(size: size, format: format)
         return renderer.image { ctx in
             let gc = ctx.cgContext
             drawFill(gc: gc, plotRect: plotRect, minEle: minEle, eleRange: eleRange)
@@ -157,7 +159,7 @@ struct MiniProfileView: View {
             }
         }
         .frame(height: height)
-        .background(TM.bgSecondary)
+        .background(TM.bgPrimary)
     }
 
     // MARK: - Cursor (O(1) — uses pre-computed bounds)

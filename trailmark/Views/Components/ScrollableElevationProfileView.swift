@@ -59,7 +59,7 @@ private struct ProfileImageRenderer {
     let height: CGFloat
     let maxRenderPoints: Int
 
-    private let paddingTop: CGFloat = 16
+    private let paddingTop: CGFloat = 40
     private let paddingBottom: CGFloat = 16
 
     private var subsampleStep: Int {
@@ -109,10 +109,16 @@ private struct ProfileImageRenderer {
         return (minEle, max(maxEle - minEle, 1))
     }
 
+    private var transparentFormat: UIGraphicsImageRendererFormat {
+        let format = UIGraphicsImageRendererFormat()
+        format.opaque = false
+        return format
+    }
+
     func renderProfile() -> UIImage? {
         guard trackPoints.count >= 2 else { return nil }
         let (minEle, eleRange) = elevationBounds
-        let renderer = UIGraphicsImageRenderer(size: imageSize)
+        let renderer = UIGraphicsImageRenderer(size: imageSize, format: transparentFormat)
         return renderer.image { ctx in
             drawProfile(context: ctx.cgContext, plotRect: plotRect, minEle: minEle, eleRange: eleRange)
         }
@@ -121,7 +127,7 @@ private struct ProfileImageRenderer {
     func renderMilestones() -> UIImage? {
         guard trackPoints.count >= 2, !milestones.isEmpty else { return nil }
         let (minEle, eleRange) = elevationBounds
-        let renderer = UIGraphicsImageRenderer(size: imageSize)
+        let renderer = UIGraphicsImageRenderer(size: imageSize, format: transparentFormat)
         return renderer.image { ctx in
             drawMilestones(context: ctx.cgContext, plotRect: plotRect, minEle: minEle, eleRange: eleRange)
         }
@@ -217,6 +223,9 @@ private struct ProfileImageRenderer {
 // MARK: - Scroll Cursor Line (inside scroll content, tracks viewport center)
 
 private struct ScrollCursorLine: View {
+    let trackPoints: [TrackPoint]
+    let pointSpacing: CGFloat
+    let horizontalPadding: CGFloat
     let paddingTop: CGFloat
     let paddingBottom: CGFloat
     let height: CGFloat
@@ -226,14 +235,161 @@ private struct ScrollCursorLine: View {
             let frame = proxy.frame(in: .scrollView)
             let viewportWidth = proxy.bounds(of: .scrollView)?.width ?? 0
             let cursorX = -frame.minX + viewportWidth / 2
+            let currentIndex = max(0, min(Int((cursorX - horizontalPadding) / pointSpacing), trackPoints.count - 1))
 
+            let plotHeight = height - paddingTop - paddingBottom
+            let (minEle, eleRange) = elevationBounds
+            let elevation = trackPoints[currentIndex].elevation
+            let dotY = paddingTop + (1 - CGFloat((elevation - minEle) / eleRange)) * plotHeight
+
+            // Dashed line
             Path { path in
                 path.move(to: CGPoint(x: cursorX, y: paddingTop - 10))
                 path.addLine(to: CGPoint(x: cursorX, y: height - paddingBottom))
             }
-            .stroke(Color.secondary, lineWidth: 1.5)
+            .stroke(Color.secondary, style: StrokeStyle(lineWidth: 1.5, dash: [4, 3]))
+
+            // Dot on the curve
+            Circle()
+                .fill(Color.white)
+                .frame(width: 10, height: 10)
+                .overlay(Circle().stroke(Color.secondary, lineWidth: 1.5))
+                .position(x: cursorX, y: dotY)
         }
         .allowsHitTesting(false)
+    }
+
+    private var elevationBounds: (min: Double, range: Double) {
+        var minEle = Double.infinity
+        var maxEle = -Double.infinity
+        for point in trackPoints {
+            minEle = min(minEle, point.elevation)
+            maxEle = max(maxEle, point.elevation)
+        }
+        return (minEle, max(maxEle - minEle, 1))
+    }
+}
+
+
+// MARK: - Segment Bubble Overlay
+
+private struct SegmentBubbleOverlay: View {
+    let trackPoints: [TrackPoint]
+    let statsData: ProfileStatsData
+    let pointSpacing: CGFloat
+    let horizontalPadding: CGFloat
+    let paddingTop: CGFloat
+    let paddingBottom: CGFloat
+    let height: CGFloat
+
+    var body: some View {
+        GeometryReader { proxy in
+            let frame = proxy.frame(in: .scrollView)
+            let viewportWidth = proxy.bounds(of: .scrollView)?.width ?? 0
+            let cursorX = -frame.minX + viewportWidth / 2
+            let currentIndex = max(0, min(Int((cursorX - horizontalPadding) / pointSpacing), trackPoints.count - 1))
+
+            if currentIndex < statsData.segmentIndices.count {
+                let segIdx = statsData.segmentIndices[currentIndex]
+                if segIdx < statsData.segments.count {
+                    let segment = statsData.segments[segIdx]
+                    let slope = statsData.slopePercent[currentIndex]
+
+                    // Compute dot Y position on the curve
+                    let plotHeight = height - paddingTop - paddingBottom
+                    let (minEle, eleRange) = elevationBounds
+                    let elevation = trackPoints[currentIndex].elevation
+                    let dotY = paddingTop + (1 - CGFloat((elevation - minEle) / eleRange)) * plotHeight
+
+                    // If bubble would go above the profile, show it below the dot
+                    let bubbleHeight: CGFloat = 36
+                    let showBelow = dotY - bubbleHeight - 12 < paddingTop
+
+                    bubbleContent(segment: segment, slope: slope, showBelow: showBelow)
+                        .position(x: cursorX, y: showBelow ? dotY + 28 : dotY - 28)
+                        .animation(.easeInOut(duration: 0.2), value: showBelow)
+                }
+            }
+        }
+        .allowsHitTesting(false)
+    }
+
+    private var elevationBounds: (min: Double, range: Double) {
+        var minEle = Double.infinity
+        var maxEle = -Double.infinity
+        for point in trackPoints {
+            minEle = min(minEle, point.elevation)
+            maxEle = max(maxEle, point.elevation)
+        }
+        return (minEle, max(maxEle - minEle, 1))
+    }
+
+    private func bubbleContent(segment: ProfileStatsData.SegmentData, slope: Int, showBelow: Bool = false) -> some View {
+        VStack(spacing: 0) {
+            // Triangle on top when below the dot
+            if showBelow {
+                Image(systemName: "arrowtriangle.up.fill")
+                    .font(.system(size: 8))
+                    .foregroundStyle(.ultraThinMaterial)
+                    .offset(x: 50)
+            }
+
+            // Bubble
+            HStack(spacing: 8) {
+                // Terrain icon
+                Image(systemName: segment.type.systemImage)
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(segment.type.color)
+                    .frame(width: 16)
+
+                // Slope
+                HStack(alignment: .firstTextBaseline, spacing: 1) {
+                    Text("\(slope > 0 ? "+" : "")\(slope)")
+                        .font(.system(size: 13, weight: .black, design: .monospaced))
+                    Text("%")
+                        .font(.system(size: 8, weight: .medium, design: .monospaced))
+                }
+                .foregroundStyle(TM.textPrimary)
+
+                Rectangle()
+                    .fill(TM.border.opacity(0.3))
+                    .frame(width: 0.5, height: 14)
+
+                // Segment distance
+                Text(formatDistance(segment.distance))
+                    .font(.system(size: 11, weight: .bold, design: .monospaced))
+                    .foregroundStyle(TM.textSecondary)
+
+                Rectangle()
+                    .fill(TM.border.opacity(0.3))
+                    .frame(width: 0.5, height: 14)
+
+                // D+/-
+                Text("\(segment.type == .descente ? "−" : "+")\(segment.elevationChange)m")
+                    .font(.system(size: 11, weight: .bold, design: .monospaced))
+                    .foregroundStyle(segment.type.color)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .glassEffect(.regular, in: .capsule)
+
+            // Triangle on bottom when above the dot
+            if !showBelow {
+                Image(systemName: "arrowtriangle.down.fill")
+                    .font(.system(size: 8))
+                    .foregroundStyle(.ultraThinMaterial)
+                    .offset(x: 50)
+            }
+        }
+        .offset(x: -50)
+    }
+
+    private func formatDistance(_ distance: Double) -> String {
+        if distance >= 1000 {
+            return String(format: "%.1f km", distance / 1000)
+        } else {
+            return "\(Int(distance))m"
+        }
     }
 }
 
@@ -258,15 +414,15 @@ struct ScrollableElevationProfileView: View {
     let trackPoints: [TrackPoint]
     let milestones: [Milestone]
     let editingMilestoneId: Int64?
+    let statsData: ProfileStatsData?
     @Binding var scrollTarget: ScrollTarget?
     var onScrollIndexChanged: ((Int) -> Void)?
     var onMilestoneTapped: ((Milestone) -> Void)?
 
-    private let pointSpacing: CGFloat = 0.5
+    private let pointSpacing: CGFloat = 0.55
     private let maxRenderPoints: Int = 2000
-    private let paddingTop: CGFloat = 16
+    private let paddingTop: CGFloat = 40
     private let paddingBottom: CGFloat = 16
-
     @State private var scrollPosition = ScrollPosition(edge: .leading)
     @State private var profileImage: UIImage?
     @State private var milestonesImage: UIImage?
@@ -285,20 +441,21 @@ struct ScrollableElevationProfileView: View {
             let horizontalPadding = geometry.size.width / 2
 
             ZStack {
-                TM.bgSecondary
+                TM.bgPrimary
 
                 // Pure scroll - NO state updates during scroll
                 ScrollView(.horizontal, showsIndicators: false) {
                     // Profile image as base, with cursor + milestones layered via overlay
-                    profileImageContent(height: geometry.size.height)
+                    profileImageContent(height: geometry.size.height, horizontalPadding: horizontalPadding)
                 }
                 .scrollPosition($scrollPosition)
+                .scrollContentBackground(.hidden)
                 // Track scroll offset - NO @State updates during scroll
                 .onScrollGeometryChange(for: Int.self) { geo in
-                    let index = Int(geo.contentOffset.x / 0.5)
+                    let index = Int(geo.contentOffset.x / pointSpacing)
                     return min(max(0, index), trackPoints.count - 1)
                 } action: { oldIndex, newIndex in
-                    syncState.currentOffset = CGFloat(newIndex) * 0.5
+                    syncState.currentOffset = CGFloat(newIndex) * pointSpacing
                     syncState.pendingIndex = newIndex
 
                     // Update data and haptic every 2 points
@@ -407,19 +564,40 @@ struct ScrollableElevationProfileView: View {
 
     // MARK: - Scroll Content (profile → cursor → milestones)
 
-    private func profileImageContent(height: CGFloat) -> some View {
+    private func profileImageContent(height: CGFloat, horizontalPadding: CGFloat) -> some View {
         Group {
             if let image = profileImage {
                 Image(uiImage: image)
                     .interpolation(.none)
                     .resizable()
                     .frame(height: height)
-                    .overlay {
-                        // Layer 2: Cursor line (tracks viewport center)
-                        ScrollCursorLine(paddingTop: paddingTop, paddingBottom: paddingBottom, height: height)
+                        .overlay {
+                        // Layer 3: Cursor line + dot (tracks viewport center)
+                        ScrollCursorLine(
+                            trackPoints: trackPoints,
+                            pointSpacing: pointSpacing,
+                            horizontalPadding: horizontalPadding,
+                            paddingTop: paddingTop,
+                            paddingBottom: paddingBottom,
+                            height: height
+                        )
                     }
                     .overlay {
-                        // Layer 3: Milestones on top of cursor
+                        // Layer 4: Segment bubble
+                        if let stats = statsData {
+                            SegmentBubbleOverlay(
+                                trackPoints: trackPoints,
+                                statsData: stats,
+                                pointSpacing: pointSpacing,
+                                horizontalPadding: horizontalPadding,
+                                paddingTop: paddingTop,
+                                paddingBottom: paddingBottom,
+                                height: height
+                            )
+                        }
+                    }
+                    .overlay {
+                        // Layer 5: Milestones on top
                         if let msImage = milestonesImage {
                             Image(uiImage: msImage)
                                 .interpolation(.none)
@@ -617,17 +795,11 @@ private struct MilestoneTapOverlay: View {
 // MARK: - Elevation Stats Overlay (Glassmorphic)
 
 struct ElevationStatsOverlay: View {
-    let altitude: Int
     let dPlus: Int
     let dMinus: Int
 
     var body: some View {
         HStack(spacing: 8) {
-            // Altitude
-            statItem(value: "\(altitude)", unit: "m", isPrimary: true)
-
-            divider
-
             // D+
             statItem(value: "+\(dPlus)", unit: "m", color: MilestoneType.montee.color, icon: MilestoneType.montee.systemImage)
 
