@@ -199,7 +199,7 @@ private struct TrailCard: View {
                         onUnlock()
                     } label: {
                         Label {
-                            Text("Débloquer avec Pro")
+                            Text("Débloquer avec PRO")
                                 .font(.caption.weight(.medium))
                         } icon: {
                             Image(systemName: "lock.fill")
