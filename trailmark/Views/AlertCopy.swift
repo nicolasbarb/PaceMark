@@ -155,7 +155,7 @@ enum AlertCopy {
         static let bullet3 = "Support prioritaire et nouvelles fonctionnalités en avant-première"
         static let bullet4 = "Synchronisation sur tous tes appareils"
 
-        static let ctaPrimary = "Débloquer Pro"
+        static let ctaPrimary = "Débloquer PRO"
         static let ctaSecondary = "Plus tard"
         static let ctaRestore = "Restaurer les achats"
 
