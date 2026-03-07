@@ -68,7 +68,7 @@ enum AlertCopy {
 
     struct PermissionDenied {
         static let title = "Accès à la localisation refusé"
-        static let message = "TrailMark a besoin du GPS pour te guider vocalement."
+        static let message = "PaceMark a besoin du GPS pour te guider vocalement."
         static let ctaSettings = "Activer dans Réglages"
         static let ctaContinue = "Continuer sans"
         static let ctaCancel = "Annuler"
@@ -106,7 +106,7 @@ enum AlertCopy {
     // MARK: - Empty States
 
     struct EmptyTrailList {
-        static let title = "Aucun TrailMark"
+        static let title = "Aucun PaceMark"
         static let subtitle = "Importez un fichier GPX pour créer\nvotre premier guide vocal de trail"
         static let ctaLabel = "Importer un GPX"
         static let secondaryText = "Prêt à transformer tes traces en guidage vocal ?"
@@ -216,12 +216,12 @@ enum AlertCopy {
     // MARK: - Onboarding
 
     struct Onboarding {
-        static let introTitle = "TrailMark"
-        static let introSubtitle = "Bienvenue sur TrailMark,\nPrépare ta course. Optimise ta performance."
+        static let introTitle = "PaceMark"
+        static let introSubtitle = "Bienvenue sur PaceMark,\nPrépare ta course. Optimise ta performance."
         static let introButton = "Commencer"
 
         static let locationPermissionTitle = "Autorisation GPS"
-        static let locationPermissionSubtitle = "Autorise TrailMark à accéder à ta position\npour te guider vocalement."
+        static let locationPermissionSubtitle = "Autorise PaceMark à accéder à ta position\npour te guider vocalement."
         static let locationPermissionCTA = "Autoriser"
         static let locationPermissionSkip = "Plus tard"
     }
