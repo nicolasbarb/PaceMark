@@ -170,8 +170,7 @@ struct TrailListFeature {
 
             case .destination(.presented(.paywall(.purchaseCompleted))),
                  .destination(.presented(.paywall(.restoreCompleted))):
-                // Update premium status but do NOT dismiss —
-                // the PaywallFeature shows a success view then dismisses itself
+                // RevenueCat handles the purchase — isPremium updated via premiumStatusStream
                 state.$isPremium.withLock { $0 = true }
                 return .none
 
