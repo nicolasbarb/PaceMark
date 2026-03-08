@@ -1,0 +1,3 @@
+Run `bundle exec fastlane beta bump:major` to create a new major version, push it to App Store Connect, and upload to TestFlight.
+
+Wait for the command to complete and report the result to the user.
