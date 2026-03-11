@@ -37,23 +37,7 @@ Clean and regenerate all certificates and profiles
 [bundle exec] fastlane ios beta
 ```
 
-Push a new build to TestFlight
-
-### ios beta_no_bump
-
-```sh
-[bundle exec] fastlane ios beta_no_bump
-```
-
-Push to TestFlight without version bump (rebuild with new build number)
-
-### ios build
-
-```sh
-[bundle exec] fastlane ios build
-```
-
-Build app for release (without upload)
+Push a new build to TestFlight. Use bump:patch/minor/major to create a new App Store version.
 
 ### ios metadata
 
