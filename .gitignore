@@ -51,5 +51,9 @@ Secrets.xcconfig
 # Code Injection
 iOSInjectionProject/
 
-# Docs
-docs/
+# Docs (keep only GitHub Pages files)
+docs/*
+!docs/index.html
+!docs/privacy.html
+!docs/support.html
+!docs/terms.html
