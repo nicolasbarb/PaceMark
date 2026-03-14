@@ -1132,4 +1132,79 @@ struct EditorFeatureTests {
         #expect(store.state.milestoneSheet != nil)
         #expect(store.state.milestoneSheet!.premiumPreviewMessage == nil)
     }
+
+    // MARK: - TTS Preview
+
+    @Test
+    func milestoneSheet_previewTTS_playsAndFinishes() async {
+        let spokeMsgs = LockIsolated<[String]>([])
+
+        var state = EditorFeature.State(trailId: 1)
+        state.milestoneSheet = MilestoneSheetFeature.State(
+            editingMilestone: nil,
+            pointIndex: 0,
+            latitude: 45.0,
+            longitude: 5.0,
+            elevation: 100,
+            distance: 0,
+            selectedType: .montee,
+            message: "Montée. 1 virgule 8 kilomètres.",
+            name: ""
+        )
+
+        let store = TestStore(initialState: state) {
+            EditorFeature()
+        } withDependencies: {
+            $0.speech = SpeechClient(
+                speak: { msg in spokeMsgs.withValue { $0.append(msg) } },
+                stop: { },
+                configureAudioSession: { }
+            )
+        }
+
+        await store.send(.milestoneSheet(.presented(.previewTTSTapped))) {
+            $0.milestoneSheet?.isPlayingPreview = true
+        }
+
+        await store.receive(.milestoneSheet(.presented(.ttsFinished))) {
+            $0.milestoneSheet?.isPlayingPreview = false
+        }
+
+        #expect(spokeMsgs.value == ["Montée. 1 virgule 8 kilomètres."])
+    }
+
+    @Test
+    func milestoneSheet_stopTTS_stopsPlayback() async {
+        let stopCalled = LockIsolated(false)
+
+        var state = EditorFeature.State(trailId: 1)
+        state.milestoneSheet = MilestoneSheetFeature.State(
+            editingMilestone: nil,
+            pointIndex: 0,
+            latitude: 45.0,
+            longitude: 5.0,
+            elevation: 100,
+            distance: 0,
+            selectedType: .montee,
+            message: "Test",
+            name: ""
+        )
+        state.milestoneSheet?.isPlayingPreview = true
+
+        let store = TestStore(initialState: state) {
+            EditorFeature()
+        } withDependencies: {
+            $0.speech = SpeechClient(
+                speak: { _ in },
+                stop: { stopCalled.setValue(true) },
+                configureAudioSession: { }
+            )
+        }
+
+        await store.send(.milestoneSheet(.presented(.stopTTSTapped))) {
+            $0.milestoneSheet?.isPlayingPreview = false
+        }
+
+        #expect(stopCalled.value)
+    }
 }
