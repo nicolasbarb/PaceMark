@@ -148,6 +148,7 @@ struct EditorFeature {
         @Shared(.inMemory("isPremium")) var isPremium = false
         @Presents var alert: AlertState<Action.Alert>?
         @Presents var milestoneSheet: MilestoneSheetFeature.State?
+        @Presents var segmentTypeSheet: SegmentTypeSheetFeature.State?
         @Presents var paywall: PaywallFeature.State?
 
         var hasMilestoneChanges: Bool {
@@ -177,6 +178,7 @@ struct EditorFeature {
         case saveButtonTapped
         case savingCompleted([Milestone])
         case milestoneSheet(PresentationAction<MilestoneSheetFeature.Action>)
+        case segmentTypeSheet(PresentationAction<SegmentTypeSheetFeature.Action>)
         case deleteMilestone(Int)
         case editMilestone(Milestone)
         // TODO: Réactiver pour gestion batch des milestones
@@ -378,7 +380,41 @@ struct EditorFeature {
                 return .none
 
             case .trimValidated:
-                // Task 6 will wire the segmentTypeSheet
+                guard let trim = state.trimState,
+                      let detail = state.trailDetail,
+                      trim.leftIndex < detail.trackPoints.count,
+                      trim.rightIndex < detail.trackPoints.count else { return .none }
+
+                let trackPoints = detail.trackPoints
+                let leftPoint = trackPoints[trim.leftIndex]
+                let rightPoint = trackPoints[trim.rightIndex]
+
+                // Auto-detect type from elevation trend
+                let elevDelta = rightPoint.elevation - leftPoint.elevation
+                let distance = rightPoint.distance - leftPoint.distance
+                let slope = distance > 0 ? elevDelta / distance : 0
+                let detectedType: SegmentType = slope > 0.05 ? .climbing : (slope < -0.05 ? .descending : .flat)
+
+                let tempSegment = Segment(
+                    id: trim.editingSegmentId,
+                    trailId: state.trailId ?? 0,
+                    type: detectedType.rawValue,
+                    startIndex: trim.leftIndex,
+                    endIndex: trim.rightIndex,
+                    startDistance: leftPoint.distance,
+                    endDistance: rightPoint.distance
+                )
+                let stats = Segment.computeStats(segment: tempSegment, trackPoints: trackPoints)
+
+                state.segmentTypeSheet = SegmentTypeSheetFeature.State(
+                    selectedType: detectedType,
+                    stats: stats,
+                    editingSegmentId: trim.editingSegmentId,
+                    startIndex: trim.leftIndex,
+                    endIndex: trim.rightIndex,
+                    startDistance: leftPoint.distance,
+                    endDistance: rightPoint.distance
+                )
                 return .none
 
             case .segmentTapped(let segment):
@@ -735,6 +771,76 @@ struct EditorFeature {
             case .alert:
                 return .none
 
+            // MARK: - Segment Type Sheet
+
+            case .segmentTypeSheet(.presented(.saveButtonTapped)):
+                guard let sheet = state.segmentTypeSheet else { return .none }
+                let trailId = state.trailId ?? 0
+                let segment = Segment(
+                    id: sheet.editingSegmentId,
+                    trailId: trailId,
+                    type: sheet.selectedType.rawValue,
+                    startIndex: sheet.startIndex,
+                    endIndex: sheet.endIndex,
+                    startDistance: sheet.startDistance,
+                    endDistance: sheet.endDistance
+                )
+
+                state.segmentTypeSheet = nil
+
+                var effects: [Effect<Action>] = []
+                if sheet.isEditing {
+                    effects.append(.send(._updateSegment(segment)))
+                } else {
+                    effects.append(.send(._insertSegment(segment)))
+                }
+
+                // Auto-create milestone if toggle is ON
+                if sheet.addMilestone, let detail = state.trailDetail {
+                    let point = detail.trackPoints[sheet.startIndex]
+                    let milestoneType = sheet.selectedType.milestoneType
+                    let stats = Segment.computeStats(segment: segment, trackPoints: detail.trackPoints)
+                    let autoMessage = AnnouncementBuilder.build(type: milestoneType, name: nil, segmentStats: stats)
+                    let message = autoMessage ?? milestoneType.label
+
+                    let milestone = Milestone(
+                        trailId: trailId,
+                        pointIndex: sheet.startIndex,
+                        latitude: point.latitude,
+                        longitude: point.longitude,
+                        elevation: point.elevation,
+                        distance: point.distance,
+                        type: milestoneType,
+                        message: message
+                    )
+                    effects.append(.send(._addMilestone(milestone)))
+                    effects.append(.send(._saveMilestones))
+                }
+
+                return .concatenate(effects)
+
+            case .segmentTypeSheet(.presented(.deleteButtonTapped)):
+                guard let sheet = state.segmentTypeSheet,
+                      let segmentId = sheet.editingSegmentId else {
+                    state.segmentTypeSheet = nil
+                    return .none
+                }
+                state.segmentTypeSheet = nil
+                return .send(._deleteSegmentById(segmentId))
+
+            case .segmentTypeSheet(.presented(.dismissTapped)):
+                state.segmentTypeSheet = nil
+                state.activeTool = nil
+                state.trimState = nil
+                return .none
+
+            case .segmentTypeSheet(.presented(.binding)),
+                 .segmentTypeSheet(.presented(.typeSelected)):
+                return .none
+
+            case .segmentTypeSheet(.dismiss):
+                return .none
+
             // MARK: - Paywall
 
             case .paywall(.presented(.purchaseCompleted)),
@@ -753,6 +859,9 @@ struct EditorFeature {
         .ifLet(\.$alert, action: \.alert)
         .ifLet(\.$milestoneSheet, action: \.milestoneSheet) {
             MilestoneSheetFeature()
+        }
+        .ifLet(\.$segmentTypeSheet, action: \.segmentTypeSheet) {
+            SegmentTypeSheetFeature()
         }
         .ifLet(\.$paywall, action: \.paywall) {
             PaywallFeature()

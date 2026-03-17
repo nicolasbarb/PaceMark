@@ -76,6 +76,18 @@ struct EditorView: View {
                         .padding(.top, 8)
                         .padding(.horizontal, 12)
                         .allowsHitTesting(false)
+
+                        // Trim overlay (when segment tool is active)
+                        if let trimState = store.trimState {
+                            TrimOverlayView(
+                                trimState: trimState,
+                                trackPointCount: detail.trackPoints.count,
+                                onLeftMoved: { store.send(.trimLeftMoved($0)) },
+                                onRightMoved: { store.send(.trimRightMoved($0)) },
+                                onValidate: { store.send(.trimValidated) },
+                                onCancel: { store.send(.toolSelected(nil)) }
+                            )
+                        }
                     }
                     .containerRelativeFrame(.vertical) { height, _ in height * 0.5 }
 
@@ -98,8 +110,8 @@ struct EditorView: View {
                     )
                     .padding(.bottom, 12)
 
-                    // Add milestone button (glass, bottom)
-                    addMilestoneButton
+                    // Glass toolbox (bottom)
+                    toolbox
                         .padding(.horizontal, 16)
                         .padding(.bottom, 16)
                 }
@@ -180,6 +192,13 @@ struct EditorView: View {
                     highlightedMilestoneId = nil
                 }
         }
+        .sheet(
+            item: $store.scope(state: \.segmentTypeSheet, action: \.segmentTypeSheet)
+        ) { sheetStore in
+            SegmentTypeSheetView(store: sheetStore)
+                .presentationDetents([.fraction(0.4)])
+                .presentationBackground(TM.bgCard)
+        }
         .fullScreenCover(
             item: $store.scope(state: \.paywall, action: \.paywall)
         ) { paywallStore in
@@ -188,30 +207,94 @@ struct EditorView: View {
     }
 
 
-    // MARK: - Add Milestone Button (Primary CTA)
+    // MARK: - Glass Toolbox
 
-    private var isOnExistingMilestone: Bool {
-        store.milestones.contains { abs($0.pointIndex - scrollIndexHolder.index) <= 5 }
-    }
+    private var toolbox: some View {
+        HStack(spacing: 0) {
+            // Segment tool
+            toolButton(
+                icon: "waveform.path.ecg",
+                label: "Segment",
+                isActive: store.activeTool == .segment
+            ) {
+                Haptic.medium.trigger()
+                if store.activeTool == .segment {
+                    store.send(.toolSelected(nil))
+                } else {
+                    store.send(.toolSelected(.segment))
+                }
+            }
 
-    private var addMilestoneButton: some View {
-        Button {
-            Haptic.medium.trigger()
-            store.send(.profileTapped(scrollIndexHolder.index))
-        } label: {
-            Text("Ajouter un repère")
-                .font(.headline.weight(.semibold))
-            .foregroundStyle(.white)
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 16)
-            .background {
-                Capsule()
-                    .fill(TM.accent)
-                    .shadow(color: TM.accent.opacity(0.4), radius: 12, x: 0, y: 6)
+            // Divider
+            Rectangle()
+                .fill(Color.white.opacity(0.1))
+                .frame(width: 1, height: 28)
+                .padding(.horizontal, 2)
+
+            // Repere tool
+            toolButton(
+                icon: "mappin.and.ellipse",
+                label: "Repere",
+                isActive: store.activeTool == .repere
+            ) {
+                Haptic.medium.trigger()
+                store.send(.profileTapped(scrollIndexHolder.index))
+            }
+
+            // Divider
+            Rectangle()
+                .fill(Color.white.opacity(0.1))
+                .frame(width: 1, height: 28)
+                .padding(.horizontal, 2)
+
+            // Auto PRO tool
+            Button {
+                Haptic.medium.trigger()
+                store.send(.autoDetectTapped)
+            } label: {
+                VStack(spacing: 3) {
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(store.activeTool == nil ? Color.white.opacity(0.7) : Color.white.opacity(0.35))
+                    HStack(spacing: 2) {
+                        Text("Auto")
+                            .font(.system(size: 9, weight: .semibold))
+                            .foregroundStyle(Color.white.opacity(0.5))
+                        Text("PRO")
+                            .font(.system(size: 7, weight: .heavy))
+                            .foregroundStyle(.black)
+                            .padding(.horizontal, 4)
+                            .padding(.vertical, 1)
+                            .background(TM.accent, in: RoundedRectangle(cornerRadius: 3))
+                    }
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 8)
             }
         }
-        .disabled(isOnExistingMilestone)
-        .opacity(isOnExistingMilestone ? 0.4 : 1)
+        .padding(8)
+        .glassEffect(.regular, in: .rect(cornerRadius: 16))
+    }
+
+    private func toolButton(icon: String, label: String, isActive: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            VStack(spacing: 3) {
+                Image(systemName: icon)
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(isActive ? TM.accent : Color.white.opacity(0.7))
+                Text(label)
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(isActive ? TM.accent : Color.white.opacity(0.5))
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 8)
+            .background {
+                if isActive {
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(TM.accent.opacity(0.15))
+                }
+            }
+        }
     }
 }
 
@@ -462,6 +545,211 @@ struct MilestoneSheetView: View {
         }
         .padding(4)
         .glassEffect(.regular, in: .rect(cornerRadius: 14))
+    }
+}
+
+// MARK: - Trim Overlay View
+
+private struct TrimOverlayView: View {
+    let trimState: TrimState
+    let trackPointCount: Int
+    let onLeftMoved: (Int) -> Void
+    let onRightMoved: (Int) -> Void
+    let onValidate: () -> Void
+    let onCancel: () -> Void
+
+    var body: some View {
+        GeometryReader { geo in
+            let totalWidth = geo.size.width
+            let leftFrac = trackPointCount > 1 ? CGFloat(trimState.leftIndex) / CGFloat(trackPointCount - 1) : 0
+            let rightFrac = trackPointCount > 1 ? CGFloat(trimState.rightIndex) / CGFloat(trackPointCount - 1) : 1
+
+            ZStack {
+                // Dimmed left zone
+                Rectangle()
+                    .fill(Color.black.opacity(0.4))
+                    .frame(width: leftFrac * totalWidth)
+                    .frame(maxHeight: .infinity, alignment: .leading)
+                    .allowsHitTesting(false)
+
+                // Dimmed right zone
+                Rectangle()
+                    .fill(Color.black.opacity(0.4))
+                    .frame(width: (1 - rightFrac) * totalWidth)
+                    .frame(maxHeight: .infinity, alignment: .trailing)
+                    .allowsHitTesting(false)
+
+                // Left handle
+                TrimHandle()
+                    .position(x: leftFrac * totalWidth, y: geo.size.height / 2)
+                    .gesture(DragGesture().onChanged { value in
+                        let newFrac = max(0, min(1, value.location.x / totalWidth))
+                        let newIndex = Int(newFrac * CGFloat(trackPointCount - 1))
+                        onLeftMoved(newIndex)
+                    })
+
+                // Right handle
+                TrimHandle()
+                    .position(x: rightFrac * totalWidth, y: geo.size.height / 2)
+                    .gesture(DragGesture().onChanged { value in
+                        let newFrac = max(0, min(1, value.location.x / totalWidth))
+                        let newIndex = Int(newFrac * CGFloat(trackPointCount - 1))
+                        onRightMoved(newIndex)
+                    })
+
+                // Validate button (bottom right)
+                VStack {
+                    Spacer()
+                    HStack {
+                        Spacer()
+                        Button {
+                            Haptic.success.trigger()
+                            onValidate()
+                        } label: {
+                            Image(systemName: "checkmark")
+                                .font(.system(size: 16, weight: .bold))
+                                .foregroundStyle(.white)
+                                .frame(width: 40, height: 40)
+                                .background(Color.green, in: RoundedRectangle(cornerRadius: 12))
+                                .shadow(color: Color.green.opacity(0.4), radius: 8)
+                        }
+                        .padding(12)
+                    }
+                }
+            }
+        }
+    }
+}
+
+private struct TrimHandle: View {
+    var body: some View {
+        RoundedRectangle(cornerRadius: 4)
+            .fill(TM.accent)
+            .frame(width: 8, height: 60)
+            .overlay {
+                VStack(spacing: 2) {
+                    ForEach(0..<2, id: \.self) { _ in
+                        RoundedRectangle(cornerRadius: 0.5)
+                            .fill(Color.white.opacity(0.6))
+                            .frame(width: 1, height: 12)
+                    }
+                }
+            }
+    }
+}
+
+// MARK: - Segment Type Sheet View
+
+struct SegmentTypeSheetView: View {
+    @Bindable var store: StoreOf<SegmentTypeSheetFeature>
+
+    var body: some View {
+        NavigationStack {
+            VStack(alignment: .leading, spacing: 0) {
+                // Type selector
+                Text("TYPE DE SEGMENT")
+                    .font(.caption2.weight(.semibold))
+                    .tracking(1)
+                    .foregroundStyle(TM.textMuted)
+                    .padding(.top, 20)
+
+                HStack(spacing: 8) {
+                    ForEach(SegmentType.allCases, id: \.self) { type in
+                        segmentTypeCard(type: type, isSelected: store.selectedType == type)
+                    }
+                }
+                .padding(.top, 8)
+
+                // Stats row
+                HStack(spacing: 16) {
+                    statLabel(AnnouncementBuilder.formatDistance(store.stats.distance))
+                    statLabel("D+ \(Int(store.stats.elevationGain))m")
+                    statLabel("\(Int((abs(store.stats.averageSlope) * 100).rounded()))%")
+                }
+                .padding(12)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(TM.bgSecondary, in: RoundedRectangle(cornerRadius: 10))
+                .padding(.top, 14)
+
+                // Add milestone toggle
+                Toggle(isOn: $store.addMilestone) {
+                    Text("Ajouter un repere au debut")
+                        .font(.body)
+                        .foregroundStyle(TM.textPrimary)
+                }
+                .tint(TM.accent)
+                .padding(.top, 14)
+
+                Spacer()
+
+                // CTA
+                Button {
+                    Haptic.success.trigger()
+                    store.send(.saveButtonTapped)
+                } label: {
+                    Text("Valider le segment")
+                        .font(.headline.weight(.semibold))
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 16)
+                        .background(TM.accent, in: Capsule())
+                }
+                .padding(.bottom, 16)
+            }
+            .padding(.horizontal, 20)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Fermer", systemImage: "xmark", role: .cancel) {
+                        Haptic.light.trigger()
+                        store.send(.dismissTapped)
+                    }
+                }
+                ToolbarItem(placement: .principal) {
+                    Text(store.isEditing ? "Modifier le segment" : "Nouveau segment")
+                        .font(.headline)
+                }
+                if store.isEditing {
+                    ToolbarItem(placement: .destructiveAction) {
+                        Button("Supprimer", systemImage: "trash", role: .destructive) {
+                            Haptic.warning.trigger()
+                            store.send(.deleteButtonTapped)
+                        }
+                        .tint(TM.danger)
+                    }
+                }
+            }
+            .navigationBarTitleDisplayMode(.inline)
+        }
+    }
+
+    private func segmentTypeCard(type: SegmentType, isSelected: Bool) -> some View {
+        Button {
+            Haptic.selection.trigger()
+            store.send(.typeSelected(type))
+        } label: {
+            VStack(spacing: 4) {
+                Image(systemName: type.milestoneType.systemImage)
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(isSelected ? type.milestoneType.color : TM.textMuted)
+                Text(type.milestoneType.label)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(isSelected ? TM.textPrimary : TM.textMuted)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 12)
+            .background {
+                if isSelected {
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(type.milestoneType.color.opacity(0.12))
+                }
+            }
+        }
+    }
+
+    private func statLabel(_ text: String) -> some View {
+        Text(text)
+            .font(.system(.caption, design: .monospaced, weight: .bold))
+            .foregroundStyle(TM.textSecondary)
     }
 }
 
