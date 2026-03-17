@@ -87,6 +87,108 @@ enum MilestoneType: String, Codable, CaseIterable, Equatable, Hashable, Sendable
     case info
 }
 
+// MARK: - SegmentType
+
+enum SegmentType: String, CaseIterable, Sendable {
+    case climbing
+    case descending
+    case flat
+
+    var milestoneType: MilestoneType {
+        switch self {
+        case .climbing: return .montee
+        case .descending: return .descente
+        case .flat: return .plat
+        }
+    }
+}
+
+// MARK: - Segment
+
+@Table("segment")
+struct Segment: Hashable, Identifiable, Sendable {
+    let id: Int64?
+    var trailId: Int64
+    var type: String
+    var startIndex: Int
+    var endIndex: Int
+    var startDistance: Double
+    var endDistance: Double
+
+    nonisolated init(
+        id: Int64? = nil,
+        trailId: Int64 = 0,
+        type: String,
+        startIndex: Int,
+        endIndex: Int,
+        startDistance: Double,
+        endDistance: Double
+    ) {
+        self.id = id
+        self.trailId = trailId
+        self.type = type
+        self.startIndex = startIndex
+        self.endIndex = endIndex
+        self.startDistance = startDistance
+        self.endDistance = endDistance
+    }
+
+    nonisolated var segmentType: SegmentType {
+        SegmentType(rawValue: type) ?? .flat
+    }
+
+    nonisolated var distance: Double {
+        endDistance - startDistance
+    }
+
+    static func computeStats(segment: Segment, trackPoints: [TrackPoint]) -> SegmentStats {
+        let start = segment.startIndex
+        let end = segment.endIndex
+        guard start >= 0, end < trackPoints.count, start < end else {
+            return SegmentStats(distance: 0, elevationGain: 0, elevationLoss: 0, averageSlope: 0)
+        }
+
+        var gain: Double = 0
+        var loss: Double = 0
+        for i in start..<end {
+            let delta = trackPoints[i + 1].elevation - trackPoints[i].elevation
+            if delta > 0 { gain += delta }
+            else { loss += Swift.abs(delta) }
+        }
+
+        let distance = trackPoints[end].distance - trackPoints[start].distance
+        let netElevation = trackPoints[end].elevation - trackPoints[start].elevation
+        let slope = distance > 0 ? netElevation / distance : 0
+
+        return SegmentStats(
+            distance: distance,
+            elevationGain: gain,
+            elevationLoss: loss,
+            averageSlope: slope
+        )
+    }
+
+    static func findSegment(containing pointIndex: Int, in segments: [Segment]) -> Segment? {
+        segments.first { $0.startIndex <= pointIndex && pointIndex <= $0.endIndex }
+    }
+
+    static func overlaps(_ segment: Segment, with existing: [Segment]) -> Bool {
+        existing.contains { other in
+            if let selfId = segment.id, selfId == other.id { return false }
+            return segment.startIndex < other.endIndex && segment.endIndex > other.startIndex
+        }
+    }
+}
+
+// MARK: - SegmentStats
+
+struct SegmentStats: Equatable, Sendable {
+    let distance: Double
+    let elevationGain: Double
+    let elevationLoss: Double
+    let averageSlope: Double
+}
+
 // MARK: - Milestone
 
 @Table("milestone")
@@ -146,11 +248,13 @@ struct TrailDetail: Equatable, Sendable {
     var trail: Trail
     var trackPoints: [TrackPoint]
     var milestones: [Milestone]
+    var segments: [Segment]
 
-    nonisolated init(trail: Trail, trackPoints: [TrackPoint], milestones: [Milestone]) {
+    nonisolated init(trail: Trail, trackPoints: [TrackPoint], milestones: [Milestone], segments: [Segment] = []) {
         self.trail = trail
         self.trackPoints = trackPoints
         self.milestones = milestones
+        self.segments = segments
     }
 
     nonisolated var distKm: String {
