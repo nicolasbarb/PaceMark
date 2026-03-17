@@ -14,6 +14,7 @@ struct ImportFeature {
         var parsedTrail: Trail?
         var parsedTrackPoints: [TrackPoint] = []
         var detectedMilestones: [Milestone] = []
+        var detectedSegments: [Segment] = []
         @Shared(.inMemory("isPremium")) var isPremium = false
 
         // Paywall
@@ -33,7 +34,7 @@ struct ImportFeature {
         case fileSelected(String) // URL path as String for Sendable
 
         // Analysis
-        case analysisCompleted(Trail, [TrackPoint], [Milestone])
+        case analysisCompleted(Trail, [TrackPoint], [Milestone], [Segment])
         case importFailed(String)
 
         // Result phase
@@ -69,6 +70,7 @@ struct ImportFeature {
                 state.phase = .analyzing
                 state.error = nil
                 let url = URL(fileURLWithPath: urlPath)
+                let isPremium = state.isPremium
 
                 return .run { send in
                     do {
@@ -101,13 +103,33 @@ struct ImportFeature {
                             )
                         }
 
-                        // 4. Détecter les jalons (en mémoire)
-                        let detectedMilestones = MilestoneDetector.detect(
-                            from: trackPoints,
-                            trailId: 0
-                        )
-
-                        await send(.analysisCompleted(trail, trackPoints, detectedMilestones))
+                        if isPremium {
+                            // PRO: detect segments + milestones
+                            let analyzerSegments = ElevationProfileAnalyzer.segments(from: trackPoints)
+                            let segments = analyzerSegments.map { seg in
+                                Segment(
+                                    trailId: 0,
+                                    type: seg.type == .climbing ? SegmentType.climbing.rawValue :
+                                          seg.type == .descending ? SegmentType.descending.rawValue :
+                                          SegmentType.flat.rawValue,
+                                    startIndex: seg.startIndex,
+                                    endIndex: seg.endIndex,
+                                    startDistance: seg.startDistance,
+                                    endDistance: seg.endDistance
+                                )
+                            }
+                            let milestones = MilestoneDetector.detect(from: trackPoints, trailId: 0)
+                            await send(.analysisCompleted(trail, trackPoints, milestones, segments))
+                        } else {
+                            // Free: skip analysis, go directly to editor
+                            let pendingData = PendingTrailData(
+                                trail: trail,
+                                trackPoints: trackPoints,
+                                detectedMilestones: [],
+                                detectedSegments: []
+                            )
+                            await send(.importCompleted(pendingData))
+                        }
                     } catch let error as GPXParser.ParseError {
                         await send(.importFailed(error.localizedDescription))
                     } catch {
@@ -117,11 +139,12 @@ struct ImportFeature {
 
             // MARK: - Analysis Result
 
-            case let .analysisCompleted(trail, trackPoints, milestones):
+            case let .analysisCompleted(trail, trackPoints, milestones, segments):
                 state.phase = .result
                 state.parsedTrail = trail
                 state.parsedTrackPoints = trackPoints
                 state.detectedMilestones = milestones
+                state.detectedSegments = segments
                 return .none
 
             case let .importFailed(message):
@@ -141,7 +164,8 @@ struct ImportFeature {
                 let pendingData = PendingTrailData(
                     trail: trail,
                     trackPoints: state.parsedTrackPoints,
-                    detectedMilestones: state.detectedMilestones
+                    detectedMilestones: state.detectedMilestones,
+                    detectedSegments: state.detectedSegments
                 )
                 return .send(.importCompleted(pendingData))
 
@@ -151,7 +175,8 @@ struct ImportFeature {
                 let pendingData = PendingTrailData(
                     trail: trail,
                     trackPoints: state.parsedTrackPoints,
-                    detectedMilestones: [] // Pas de jalons
+                    detectedMilestones: [], // Pas de jalons
+                    detectedSegments: []
                 )
                 return .send(.importCompleted(pendingData))
 

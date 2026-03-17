@@ -119,11 +119,12 @@ struct ImportFeatureTests {
             ImportFeature()
         }
 
-        await store.send(.analysisCompleted(trail, trackPoints, milestones)) {
+        await store.send(.analysisCompleted(trail, trackPoints, milestones, [])) {
             $0.phase = .result
             $0.parsedTrail = trail
             $0.parsedTrackPoints = trackPoints
             $0.detectedMilestones = milestones
+            $0.detectedSegments = []
         }
     }
 
@@ -136,11 +137,12 @@ struct ImportFeatureTests {
             ImportFeature()
         }
 
-        await store.send(.analysisCompleted(trail, trackPoints, [])) {
+        await store.send(.analysisCompleted(trail, trackPoints, [], [])) {
             $0.phase = .result
             $0.parsedTrail = trail
             $0.parsedTrackPoints = trackPoints
             $0.detectedMilestones = []
+            $0.detectedSegments = []
         }
     }
 
@@ -169,7 +171,8 @@ struct ImportFeatureTests {
                 phase: .result,
                 parsedTrail: trail,
                 parsedTrackPoints: trackPoints,
-                detectedMilestones: milestones
+                detectedMilestones: milestones,
+                detectedSegments: []
             )
         ) {
             ImportFeature()
@@ -178,7 +181,8 @@ struct ImportFeatureTests {
         let expectedPendingData = PendingTrailData(
             trail: trail,
             trackPoints: trackPoints,
-            detectedMilestones: milestones
+            detectedMilestones: milestones,
+            detectedSegments: []
         )
 
         await store.send(.continueWithMilestonesTapped)
@@ -196,7 +200,8 @@ struct ImportFeatureTests {
                 phase: .result,
                 parsedTrail: trail,
                 parsedTrackPoints: trackPoints,
-                detectedMilestones: milestones
+                detectedMilestones: milestones,
+                detectedSegments: []
             )
         ) {
             ImportFeature()
@@ -205,7 +210,8 @@ struct ImportFeatureTests {
         let expectedPendingData = PendingTrailData(
             trail: trail,
             trackPoints: trackPoints,
-            detectedMilestones: [] // No milestones
+            detectedMilestones: [], // No milestones
+            detectedSegments: []
         )
 
         await store.send(.skipTapped)
@@ -222,7 +228,8 @@ struct ImportFeatureTests {
                 phase: .result,
                 parsedTrail: trail,
                 parsedTrackPoints: trackPoints,
-                detectedMilestones: []
+                detectedMilestones: [],
+                detectedSegments: []
             )
         ) {
             ImportFeature()
@@ -231,7 +238,8 @@ struct ImportFeatureTests {
         let expectedPendingData = PendingTrailData(
             trail: trail,
             trackPoints: trackPoints,
-            detectedMilestones: []
+            detectedMilestones: [],
+            detectedSegments: []
         )
 
         await store.send(.skipTapped)
@@ -262,7 +270,8 @@ struct ImportFeatureTests {
                 phase: .result,
                 parsedTrail: trail,
                 parsedTrackPoints: trackPoints,
-                detectedMilestones: milestones
+                detectedMilestones: milestones,
+                detectedSegments: []
             )
         ) {
             ImportFeature()
@@ -285,6 +294,7 @@ struct ImportFeatureTests {
                 parsedTrail: trail,
                 parsedTrackPoints: trackPoints,
                 detectedMilestones: milestones,
+                detectedSegments: [],
                 paywall: PaywallFeature.State()
             )
         ) {
@@ -312,6 +322,7 @@ struct ImportFeatureTests {
                 parsedTrail: trail,
                 parsedTrackPoints: trackPoints,
                 detectedMilestones: milestones,
+                detectedSegments: [],
                 paywall: PaywallFeature.State()
             )
         ) {

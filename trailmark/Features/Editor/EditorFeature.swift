@@ -103,6 +103,7 @@ struct PendingTrailData: Equatable, Sendable {
     var trail: Trail
     var trackPoints: [TrackPoint]
     var detectedMilestones: [Milestone]
+    var detectedSegments: [Segment]
 }
 
 // MARK: - Editor Tool
@@ -265,11 +266,14 @@ struct EditorFeature {
                 let detail = TrailDetail(
                     trail: pending.trail,
                     trackPoints: pending.trackPoints,
-                    milestones: pending.detectedMilestones
+                    milestones: pending.detectedMilestones,
+                    segments: pending.detectedSegments
                 )
                 state.trailDetail = detail
                 state.milestones = pending.detectedMilestones
                 state.originalMilestones = pending.detectedMilestones
+                state.segments = pending.detectedSegments
+                state.originalSegments = pending.detectedSegments
                 state.isSavingInBackground = true
 
                 // Lancer la sauvegarde en arrière-plan
@@ -296,6 +300,24 @@ struct EditorFeature {
                                 )
                             }
                             let savedMs = try await database.saveMilestones(trailId, milestonesWithTrailId)
+
+                            // 3. Sauvegarder les segments si présents
+                            if !pending.detectedSegments.isEmpty {
+                                // Mettre à jour les segments avec le bon trailId
+                                for segment in pending.detectedSegments {
+                                    let segmentWithTrailId = Segment(
+                                        id: nil,
+                                        trailId: trailId,
+                                        type: segment.type,
+                                        startIndex: segment.startIndex,
+                                        endIndex: segment.endIndex,
+                                        startDistance: segment.startDistance,
+                                        endDistance: segment.endDistance
+                                    )
+                                    _ = try await database.insertSegment(segmentWithTrailId)
+                                }
+                            }
+
                             await send(.backgroundSaveCompleted(savedTrail, savedMs))
                         } else {
                             await send(.backgroundSaveCompleted(savedTrail, []))
@@ -431,8 +453,38 @@ struct EditorFeature {
                     state.paywall = PaywallFeature.State()
                     return .none
                 }
-                // PRO: auto-detect segments — will be fully implemented in Task 8
-                return .none
+                guard let detail = state.trailDetail else { return .none }
+
+                let analyzerSegments = ElevationProfileAnalyzer.segments(from: detail.trackPoints)
+                let existingSegments = state.segments
+
+                // Map analyzer segments to Segment entities, filtering out overlaps
+                var newSegments: [Segment] = []
+                for seg in analyzerSegments {
+                    let candidate = Segment(
+                        trailId: state.trailId ?? 0,
+                        type: seg.type == .climbing ? SegmentType.climbing.rawValue :
+                              seg.type == .descending ? SegmentType.descending.rawValue :
+                              SegmentType.flat.rawValue,
+                        startIndex: seg.startIndex,
+                        endIndex: seg.endIndex,
+                        startDistance: seg.startDistance,
+                        endDistance: seg.endDistance
+                    )
+                    if !Segment.overlaps(candidate, with: existingSegments + newSegments) {
+                        newSegments.append(candidate)
+                    }
+                }
+
+                guard !newSegments.isEmpty else { return .none }
+
+                // Insert all new segments
+                return .run { [database, newSegments] send in
+                    for segment in newSegments {
+                        let saved = try await database.insertSegment(segment)
+                        await send(._segmentSaved(saved))
+                    }
+                }
 
             case ._insertSegment(let segment):
                 return .run { [database] send in
