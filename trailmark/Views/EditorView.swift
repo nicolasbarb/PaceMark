@@ -35,6 +35,7 @@ struct EditorView: View {
                         ScrollableElevationProfileView(
                             trackPoints: detail.trackPoints,
                             milestones: store.milestones,
+                            segments: detail.segments,
                             editingMilestoneId: highlightedMilestoneId,
                             statsData: profileStatsData,
                             scrollTarget: $scrollTarget,
@@ -160,13 +161,13 @@ struct EditorView: View {
         .onChange(of: store.trailDetail?.trackPoints.count) { _, newCount in
             if let count = newCount, count > 0,
                let detail = store.trailDetail {
-                profileStatsData = ProfileStatsData(trackPoints: detail.trackPoints)
+                profileStatsData = ProfileStatsData(trackPoints: detail.trackPoints, segments: detail.segments)
             }
         }
         .task(id: store.trailDetail?.trail.id) {
             // Compute stats data when detail becomes available
             if let detail = store.trailDetail {
-                profileStatsData = ProfileStatsData(trackPoints: detail.trackPoints)
+                profileStatsData = ProfileStatsData(trackPoints: detail.trackPoints, segments: detail.segments)
             }
         }
         .sheet(

@@ -14,7 +14,7 @@ final class ProfileStatsData {
     let segmentIndices: [Int] // Maps each point to its segment index
     let segments: [SegmentData]
 
-    init(trackPoints: [TrackPoint]) {
+    init(trackPoints: [TrackPoint], segments: [Segment]) {
         self.trackPoints = trackPoints
 
         // Pre-compute cumulative D+ and D-
@@ -52,15 +52,25 @@ final class ProfileStatsData {
         }
         self.slopePercent = slopes
 
-        // Pre-compute terrain types using ElevationProfileAnalyzer
-        let rawTerrainTypes = ElevationProfileAnalyzer.classify(trackPoints: trackPoints)
-        self.terrainTypes = rawTerrainTypes
+        // Build terrain types from user-defined segments (default: flat)
+        var types = [TerrainType](repeating: .flat, count: trackPoints.count)
+        for segment in segments {
+            let terrainType: TerrainType = switch segment.segmentType {
+            case .climbing: .climbing
+            case .descending: .descending
+            case .flat: .flat
+            }
+            for i in segment.startIndex...min(segment.endIndex, trackPoints.count - 1) {
+                types[i] = terrainType
+            }
+        }
+        self.terrainTypes = types
 
         // Pre-compute segments
         var segmentList = [SegmentData]()
         var segmentIndexMap = [Int](repeating: 0, count: trackPoints.count)
 
-        guard !rawTerrainTypes.isEmpty else {
+        guard !types.isEmpty else {
             self.segments = []
             self.segmentIndices = []
             return
@@ -69,11 +79,11 @@ final class ProfileStatsData {
         var i = 0
         while i < trackPoints.count {
             let segmentStart = i
-            let segmentType = rawTerrainTypes[i]
+            let segmentType = types[i]
 
             // Find end of segment
             var segmentEnd = i
-            while segmentEnd < trackPoints.count - 1 && rawTerrainTypes[segmentEnd + 1] == segmentType {
+            while segmentEnd < trackPoints.count - 1 && types[segmentEnd + 1] == segmentType {
                 segmentEnd += 1
             }
 

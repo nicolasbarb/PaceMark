@@ -54,6 +54,7 @@ final class FPSCounter {
 private struct ProfileImageRenderer {
     let trackPoints: [TrackPoint]
     let milestones: [Milestone]
+    let segments: [Segment]
     let pointSpacing: CGFloat
     let horizontalPadding: CGFloat
     let height: CGFloat
@@ -137,17 +138,22 @@ private struct ProfileImageRenderer {
         let points = subsampledPoints
         guard points.count >= 2 else { return }
 
-        // Use shared ElevationProfileAnalyzer
-        let terrainTypes = ElevationProfileAnalyzer.classify(trackPoints: trackPoints)
+        // Build per-point color array from segments (monochrome by default)
+        var pointColors = [UIColor](repeating: UIColor.white.withAlphaComponent(0.3), count: trackPoints.count)
+        for segment in segments {
+            let color = UIColor(segment.segmentType.milestoneType.color)
+            for i in segment.startIndex...min(segment.endIndex, trackPoints.count - 1) {
+                pointColors[i] = color
+            }
+        }
 
         // Draw colored segments
         for i in 1..<points.count {
             let (prevIndex, prevPoint) = points[i - 1]
             let (currIndex, currPoint) = points[i]
 
-            // Use terrain type of current point (already smoothed)
-            let terrain = terrainTypes[currIndex]
-            let color = terrain.uiColor
+            // Use segment-based color of current point
+            let color = pointColors[currIndex]
 
             let x1 = plotRect.minX + CGFloat(prevIndex) * pointSpacing
             let y1 = plotRect.maxY - CGFloat((prevPoint.elevation - minEle) / eleRange) * plotRect.height
@@ -414,6 +420,7 @@ struct ScrollTarget: Equatable {
 struct ScrollableElevationProfileView: View {
     let trackPoints: [TrackPoint]
     let milestones: [Milestone]
+    let segments: [Segment]
     let editingMilestoneId: Int64?
     let statsData: ProfileStatsData?
     @Binding var scrollTarget: ScrollTarget?
@@ -533,22 +540,22 @@ struct ScrollableElevationProfileView: View {
             }
             .onAppear {
                 if geometry.size.height > 0 {
-                    renderProfileImage(horizontalPadding: horizontalPadding, height: geometry.size.height)
+                    renderProfileImage(horizontalPadding: horizontalPadding, height: geometry.size.height, segments: segments)
                 }
             }
             .onChange(of: geometry.size.height) { _, newHeight in
                 if newHeight > 0 {
-                    renderProfileImage(horizontalPadding: horizontalPadding, height: newHeight)
+                    renderProfileImage(horizontalPadding: horizontalPadding, height: newHeight, segments: segments)
                 }
             }
             .onChange(of: trackPoints.count) { _, _ in
                 if geometry.size.height > 0 {
-                    renderProfileImage(horizontalPadding: horizontalPadding, height: geometry.size.height)
+                    renderProfileImage(horizontalPadding: horizontalPadding, height: geometry.size.height, segments: segments)
                 }
             }
             .onChange(of: milestones.count) { _, _ in
                 if geometry.size.height > 0 {
-                    renderProfileImage(horizontalPadding: horizontalPadding, height: geometry.size.height)
+                    renderProfileImage(horizontalPadding: horizontalPadding, height: geometry.size.height, segments: segments)
                 }
             }
         }
@@ -604,10 +611,11 @@ struct ScrollableElevationProfileView: View {
 
     // MARK: - Profile Image Rendering
 
-    private func renderProfileImage(horizontalPadding: CGFloat, height: CGFloat) {
+    private func renderProfileImage(horizontalPadding: CGFloat, height: CGFloat, segments: [Segment]) {
         let renderer = ProfileImageRenderer(
             trackPoints: trackPoints,
             milestones: milestones,
+            segments: segments,
             pointSpacing: pointSpacing,
             horizontalPadding: horizontalPadding,
             height: height,
