@@ -99,6 +99,23 @@ private var migrator: DatabaseMigrator {
             """)
     }
 
+    migrator.registerMigration("v2") { db in
+        try db.execute(sql: """
+            CREATE TABLE segment (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                trailId INTEGER NOT NULL REFERENCES trail(id) ON DELETE CASCADE,
+                type TEXT NOT NULL,
+                startIndex INTEGER NOT NULL,
+                endIndex INTEGER NOT NULL,
+                startDistance REAL NOT NULL,
+                endDistance REAL NOT NULL
+            )
+            """)
+        try db.execute(sql: """
+            CREATE INDEX idx_segment_trailId ON segment(trailId)
+            """)
+    }
+
     return migrator
 }
 
@@ -111,6 +128,10 @@ struct DatabaseClient: Sendable {
     var deleteTrail: @Sendable (Int64) async throws -> Void
     var saveMilestones: @Sendable (Int64, [Milestone]) async throws -> [Milestone]
     var updateTrailName: @Sendable (Int64, String) async throws -> Void
+    var fetchSegments: @Sendable (Int64) async throws -> [Segment]
+    var insertSegment: @Sendable (Segment) async throws -> Segment
+    var updateSegment: @Sendable (Segment) async throws -> Segment
+    var deleteSegment: @Sendable (Int64) async throws -> Void
 }
 
 // MARK: - DependencyKey
@@ -149,7 +170,11 @@ extension DatabaseClient: DependencyKey {
                         .where { col in col.trailId == trailId }
                         .order { col in col.distance.asc() }
                         .fetchAll(db)
-                    return TrailDetail(trail: trail, trackPoints: trackPoints, milestones: milestones)
+                    let segments = try Segment
+                        .where { col in col.trailId == trailId }
+                        .order { col in col.startDistance.asc() }
+                        .fetchAll(db)
+                    return TrailDetail(trail: trail, trackPoints: trackPoints, milestones: milestones, segments: segments)
                 }
             },
             insertTrail: { trail, trackPoints in
@@ -246,6 +271,66 @@ extension DatabaseClient: DependencyKey {
                         .where { $0.id == trailId }
                         .execute(db)
                 }
+            },
+            fetchSegments: { trailId in
+                try await database.read { db in
+                    try Segment
+                        .where { col in col.trailId == trailId }
+                        .order { col in col.startDistance.asc() }
+                        .fetchAll(db)
+                }
+            },
+            insertSegment: { segment in
+                try await database.write { db in
+                    try Segment.insert {
+                        Segment.Draft(
+                            trailId: segment.trailId,
+                            type: segment.type,
+                            startIndex: segment.startIndex,
+                            endIndex: segment.endIndex,
+                            startDistance: segment.startDistance,
+                            endDistance: segment.endDistance
+                        )
+                    }
+                    .execute(db)
+
+                    return Segment(
+                        id: db.lastInsertedRowID,
+                        trailId: segment.trailId,
+                        type: segment.type,
+                        startIndex: segment.startIndex,
+                        endIndex: segment.endIndex,
+                        startDistance: segment.startDistance,
+                        endDistance: segment.endDistance
+                    )
+                }
+            },
+            updateSegment: { segment in
+                try await database.write { db in
+                    guard let segmentId = segment.id else {
+                        throw DatabaseError(message: "Cannot update segment without ID")
+                    }
+
+                    try Segment.update {
+                        $0.trailId = segment.trailId
+                        $0.type = segment.type
+                        $0.startIndex = segment.startIndex
+                        $0.endIndex = segment.endIndex
+                        $0.startDistance = segment.startDistance
+                        $0.endDistance = segment.endDistance
+                    }
+                    .where { $0.id == segmentId }
+                    .execute(db)
+
+                    return segment
+                }
+            },
+            deleteSegment: { segmentId in
+                try await database.write { db in
+                    try Segment.delete()
+                        .where { col in col.id == segmentId }
+                        .execute(db)
+                }
             }
         )
     }
@@ -257,7 +342,11 @@ extension DatabaseClient: DependencyKey {
             insertTrail: { trail, _ in trail },
             deleteTrail: { _ in },
             saveMilestones: { _, milestones in milestones },
-            updateTrailName: { _, _ in }
+            updateTrailName: { _, _ in },
+            fetchSegments: { _ in [] },
+            insertSegment: { segment in segment },
+            updateSegment: { segment in segment },
+            deleteSegment: { _ in }
         )
     }
 
@@ -300,7 +389,11 @@ extension DatabaseClient: DependencyKey {
                         .where { col in col.trailId == trailId }
                         .order { col in col.distance.asc() }
                         .fetchAll(db)
-                    return TrailDetail(trail: trail, trackPoints: trackPoints, milestones: milestones)
+                    let segments = try Segment
+                        .where { col in col.trailId == trailId }
+                        .order { col in col.startDistance.asc() }
+                        .fetchAll(db)
+                    return TrailDetail(trail: trail, trackPoints: trackPoints, milestones: milestones, segments: segments)
                 }
             },
             insertTrail: { trail, trackPoints in
@@ -390,6 +483,66 @@ extension DatabaseClient: DependencyKey {
                 try await database.write { db in
                     try Trail.update { $0.name = newName }
                         .where { $0.id == trailId }
+                        .execute(db)
+                }
+            },
+            fetchSegments: { trailId in
+                try await database.read { db in
+                    try Segment
+                        .where { col in col.trailId == trailId }
+                        .order { col in col.startDistance.asc() }
+                        .fetchAll(db)
+                }
+            },
+            insertSegment: { segment in
+                try await database.write { db in
+                    try Segment.insert {
+                        Segment.Draft(
+                            trailId: segment.trailId,
+                            type: segment.type,
+                            startIndex: segment.startIndex,
+                            endIndex: segment.endIndex,
+                            startDistance: segment.startDistance,
+                            endDistance: segment.endDistance
+                        )
+                    }
+                    .execute(db)
+
+                    return Segment(
+                        id: db.lastInsertedRowID,
+                        trailId: segment.trailId,
+                        type: segment.type,
+                        startIndex: segment.startIndex,
+                        endIndex: segment.endIndex,
+                        startDistance: segment.startDistance,
+                        endDistance: segment.endDistance
+                    )
+                }
+            },
+            updateSegment: { segment in
+                try await database.write { db in
+                    guard let segmentId = segment.id else {
+                        throw DatabaseError(message: "Cannot update segment without ID")
+                    }
+
+                    try Segment.update {
+                        $0.trailId = segment.trailId
+                        $0.type = segment.type
+                        $0.startIndex = segment.startIndex
+                        $0.endIndex = segment.endIndex
+                        $0.startDistance = segment.startDistance
+                        $0.endDistance = segment.endDistance
+                    }
+                    .where { $0.id == segmentId }
+                    .execute(db)
+
+                    return segment
+                }
+            },
+            deleteSegment: { segmentId in
+                try await database.write { db in
+                    try Segment.delete()
+                        .where { col in col.id == segmentId }
                         .execute(db)
                 }
             }

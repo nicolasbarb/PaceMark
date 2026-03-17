@@ -157,7 +157,11 @@ struct TrailListFeatureTests {
                 insertTrail: { trail, _ in trail },
                 deleteTrail: { id in deleteCalledWithId = id },
                 saveMilestones: { _, ms in ms },
-                updateTrailName: { _, _ in }
+                updateTrailName: { _, _ in },
+                fetchSegments: { _ in [] },
+                insertSegment: { segment in segment },
+                updateSegment: { segment in segment },
+                deleteSegment: { _ in }
             )
         }
 

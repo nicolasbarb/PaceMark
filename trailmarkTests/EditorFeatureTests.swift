@@ -86,7 +86,11 @@ struct EditorFeatureTests {
                 insertTrail: { trail, _ in trail },
                 deleteTrail: { _ in },
                 saveMilestones: { _, ms in ms },
-                updateTrailName: { _, _ in }
+                updateTrailName: { _, _ in },
+                fetchSegments: { _ in [] },
+                insertSegment: { segment in segment },
+                updateSegment: { segment in segment },
+                deleteSegment: { _ in }
             )
         }
 
@@ -114,7 +118,11 @@ struct EditorFeatureTests {
                 insertTrail: { trail, _ in trail },
                 deleteTrail: { _ in },
                 saveMilestones: { _, ms in ms },
-                updateTrailName: { _, _ in }
+                updateTrailName: { _, _ in },
+                fetchSegments: { _ in [] },
+                insertSegment: { segment in segment },
+                updateSegment: { segment in segment },
+                deleteSegment: { _ in }
             )
         }
 
@@ -137,7 +145,11 @@ struct EditorFeatureTests {
                 insertTrail: { trail, _ in trail },
                 deleteTrail: { _ in },
                 saveMilestones: { _, ms in ms },
-                updateTrailName: { _, _ in }
+                updateTrailName: { _, _ in },
+                fetchSegments: { _ in [] },
+                insertSegment: { segment in segment },
+                updateSegment: { segment in segment },
+                deleteSegment: { _ in }
             )
         }
 
@@ -282,7 +294,11 @@ struct EditorFeatureTests {
                     savedMilestones = milestones
                     return milestones
                 },
-                updateTrailName: { _, _ in }
+                updateTrailName: { _, _ in },
+                fetchSegments: { _ in [] },
+                insertSegment: { segment in segment },
+                updateSegment: { segment in segment },
+                deleteSegment: { _ in }
             )
         }
 
@@ -373,7 +389,11 @@ struct EditorFeatureTests {
                 updateTrailName: { id, name in
                     updatedTrailId = id
                     updatedName = name
-                }
+                },
+                fetchSegments: { _ in [] },
+                insertSegment: { segment in segment },
+                updateSegment: { segment in segment },
+                deleteSegment: { _ in }
             )
         }
 
@@ -401,7 +421,11 @@ struct EditorFeatureTests {
                 insertTrail: { trail, _ in trail },
                 deleteTrail: { id in deletedTrailId = id },
                 saveMilestones: { _, ms in ms },
-                updateTrailName: { _, _ in }
+                updateTrailName: { _, _ in },
+                fetchSegments: { _ in [] },
+                insertSegment: { segment in segment },
+                updateSegment: { segment in segment },
+                deleteSegment: { _ in }
             )
             $0.dismiss = DismissEffect { }
         }
@@ -431,7 +455,11 @@ struct EditorFeatureTests {
                 insertTrail: { trail, _ in trail },
                 deleteTrail: { _ in },
                 saveMilestones: { _, ms in ms },
-                updateTrailName: { _, _ in }
+                updateTrailName: { _, _ in },
+                fetchSegments: { _ in [] },
+                insertSegment: { segment in segment },
+                updateSegment: { segment in segment },
+                deleteSegment: { _ in }
             )
         }
 
@@ -504,7 +532,11 @@ struct EditorFeatureTests {
                 insertTrail: { trail, _ in trail },
                 deleteTrail: { _ in },
                 saveMilestones: { _, ms in ms },
-                updateTrailName: { _, _ in }
+                updateTrailName: { _, _ in },
+                fetchSegments: { _ in [] },
+                insertSegment: { segment in segment },
+                updateSegment: { segment in segment },
+                deleteSegment: { _ in }
             )
         }
 
@@ -647,7 +679,11 @@ struct EditorFeatureTests {
                 insertTrail: { trail, _ in trail },
                 deleteTrail: { _ in },
                 saveMilestones: { _, ms in ms },
-                updateTrailName: { _, _ in }
+                updateTrailName: { _, _ in },
+                fetchSegments: { _ in [] },
+                insertSegment: { segment in segment },
+                updateSegment: { segment in segment },
+                deleteSegment: { _ in }
             )
         }
 
@@ -679,7 +715,11 @@ struct EditorFeatureTests {
                 insertTrail: { trail, _ in trail },
                 deleteTrail: { _ in },
                 saveMilestones: { _, ms in ms },
-                updateTrailName: { _, _ in updateCalled = true }
+                updateTrailName: { _, _ in updateCalled = true },
+                fetchSegments: { _ in [] },
+                insertSegment: { segment in segment },
+                updateSegment: { segment in segment },
+                deleteSegment: { _ in }
             )
         }
 
@@ -744,7 +784,11 @@ struct EditorFeatureTests {
                 insertTrail: { trail, _ in trail },
                 deleteTrail: { id in deletedTrailId = id },
                 saveMilestones: { _, ms in ms },
-                updateTrailName: { _, _ in }
+                updateTrailName: { _, _ in },
+                fetchSegments: { _ in [] },
+                insertSegment: { segment in segment },
+                updateSegment: { segment in segment },
+                deleteSegment: { _ in }
             )
             $0.dismiss = DismissEffect { }
         }
@@ -886,7 +930,11 @@ struct EditorFeatureTests {
                 insertTrail: { trail, _ in trail },
                 deleteTrail: { _ in },
                 saveMilestones: { _, ms in ms },
-                updateTrailName: { _, _ in }
+                updateTrailName: { _, _ in },
+                fetchSegments: { _ in [] },
+                insertSegment: { segment in segment },
+                updateSegment: { segment in segment },
+                deleteSegment: { _ in }
             )
         }
 
@@ -954,7 +1002,11 @@ struct EditorFeatureTests {
                 insertTrail: { trail, _ in trail },
                 deleteTrail: { _ in },
                 saveMilestones: { _, ms in ms },
-                updateTrailName: { _, _ in }
+                updateTrailName: { _, _ in },
+                fetchSegments: { _ in [] },
+                insertSegment: { segment in segment },
+                updateSegment: { segment in segment },
+                deleteSegment: { _ in }
             )
         }
 
@@ -1240,7 +1292,11 @@ struct EditorFeatureTests {
                 insertTrail: { trail, _ in trail },
                 deleteTrail: { _ in },
                 saveMilestones: { _, ms in ms },
-                updateTrailName: { _, _ in }
+                updateTrailName: { _, _ in },
+                fetchSegments: { _ in [] },
+                insertSegment: { segment in segment },
+                updateSegment: { segment in segment },
+                deleteSegment: { _ in }
             )
         }
 
@@ -1298,7 +1354,11 @@ struct EditorFeatureTests {
                 insertTrail: { trail, _ in trail },
                 deleteTrail: { _ in },
                 saveMilestones: { _, ms in ms },
-                updateTrailName: { _, _ in }
+                updateTrailName: { _, _ in },
+                fetchSegments: { _ in [] },
+                insertSegment: { segment in segment },
+                updateSegment: { segment in segment },
+                deleteSegment: { _ in }
             )
         }
 
@@ -1356,7 +1416,11 @@ struct EditorFeatureTests {
                 insertTrail: { trail, _ in trail },
                 deleteTrail: { _ in },
                 saveMilestones: { _, ms in ms },
-                updateTrailName: { _, _ in }
+                updateTrailName: { _, _ in },
+                fetchSegments: { _ in [] },
+                insertSegment: { segment in segment },
+                updateSegment: { segment in segment },
+                deleteSegment: { _ in }
             )
         }
 
