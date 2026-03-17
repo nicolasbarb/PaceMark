@@ -319,18 +319,8 @@ struct EditorFeature {
                     trackPoints: detail.trackPoints
                 )
 
-                // Compute lookahead stats and build premium message
-                let terrainTypes = ElevationProfileAnalyzer.classify(trackPoints: detail.trackPoints)
-                let lookaheadStats = ElevationProfileAnalyzer.computeLookaheadStats(
-                    from: pointIndex,
-                    trackPoints: detail.trackPoints,
-                    terrainTypes: terrainTypes
-                )
-                let autoMessage = AnnouncementBuilder.build(
-                    type: detectedType,
-                    name: nil,
-                    lookaheadStats: lookaheadStats
-                )
+                // For now, pass nil for segmentStats (Task 5 will implement real segment-based lookup)
+                let autoMessage: String? = nil
 
                 state.milestoneSheet = MilestoneSheetFeature.State(
                     editingMilestone: nil,
@@ -347,29 +337,9 @@ struct EditorFeature {
                 return .none
 
             case let .editMilestone(milestone):
-                // Recompute autoMessage from current terrain data
-                var autoMessage: String? = nil
+                // For now, autoMessage is always nil (Task 5 will implement real segment-based lookup)
+                let autoMessage: String? = nil
                 var personalMessage = milestone.message
-                if let detail = state.trailDetail {
-                    let terrainTypes = ElevationProfileAnalyzer.classify(trackPoints: detail.trackPoints)
-                    let lookaheadStats = ElevationProfileAnalyzer.computeLookaheadStats(
-                        from: milestone.pointIndex,
-                        trackPoints: detail.trackPoints,
-                        terrainTypes: terrainTypes
-                    )
-                    autoMessage = AnnouncementBuilder.build(
-                        type: milestone.milestoneType,
-                        name: milestone.name,
-                        lookaheadStats: lookaheadStats
-                    )
-
-                    // Split: if saved message starts with auto prefix, strip it
-                    if let auto = autoMessage, personalMessage.hasPrefix(auto) {
-                        let remainder = String(personalMessage.dropFirst(auto.count))
-                            .trimmingCharacters(in: .whitespaces)
-                        personalMessage = remainder
-                    }
-                }
 
                 state.milestoneSheet = MilestoneSheetFeature.State(
                     editingMilestone: milestone,
@@ -446,21 +416,8 @@ struct EditorFeature {
                 return .none
 
             case .milestoneSheet(.presented(.typeSelected(let type))):
-                // Recompute autoMessage for new type
-                if let sheet = state.milestoneSheet, let detail = state.trailDetail {
-                    let terrainTypes = ElevationProfileAnalyzer.classify(trackPoints: detail.trackPoints)
-                    let lookaheadStats = ElevationProfileAnalyzer.computeLookaheadStats(
-                        from: sheet.pointIndex,
-                        trackPoints: detail.trackPoints,
-                        terrainTypes: terrainTypes
-                    )
-                    let autoMessage = AnnouncementBuilder.build(
-                        type: type,
-                        name: sheet.name.isEmpty ? nil : sheet.name,
-                        lookaheadStats: lookaheadStats
-                    )
-                    state.milestoneSheet?.autoMessage = autoMessage
-                }
+                // For now, autoMessage is always nil (Task 5 will implement real segment-based lookup)
+                state.milestoneSheet?.autoMessage = nil
                 return .none
 
             case .milestoneSheet(.presented(.saveButtonTapped)):

@@ -7,15 +7,15 @@ enum AnnouncementBuilder {
     /// - Parameters:
     ///   - type: The milestone type
     ///   - name: Optional name (e.g., "Col de la Croix")
-    ///   - lookaheadStats: Terrain zone stats from the milestone forward
+    ///   - segmentStats: Segment stats from the milestone forward
     /// - Returns: A TTS-ready French string, or nil if type is not montee/descente or stats are nil
     static func build(
         type: MilestoneType,
         name: String?,
-        lookaheadStats: ElevationProfileAnalyzer.LookaheadStats?
+        segmentStats: SegmentStats?
     ) -> String? {
         guard type == .montee || type == .descente else { return nil }
-        guard let stats = lookaheadStats else { return nil }
+        guard let stats = segmentStats else { return nil }
 
         var parts: [String] = []
 

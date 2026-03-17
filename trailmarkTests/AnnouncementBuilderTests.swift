@@ -8,8 +8,7 @@ struct AnnouncementBuilderTests {
 
     @Test
     func montee_generatesCorrectMessage() throws {
-        let stats = ElevationProfileAnalyzer.LookaheadStats(
-            terrainType: .climbing,
+        let stats = SegmentStats(
             distance: 1800,
             elevationGain: 215,
             elevationLoss: 0,
@@ -19,7 +18,7 @@ struct AnnouncementBuilderTests {
         let result = AnnouncementBuilder.build(
             type: .montee,
             name: nil,
-            lookaheadStats: stats
+            segmentStats: stats
         )
 
         let message = try #require(result)
@@ -31,8 +30,7 @@ struct AnnouncementBuilderTests {
 
     @Test
     func montee_withName_includesName() throws {
-        let stats = ElevationProfileAnalyzer.LookaheadStats(
-            terrainType: .climbing,
+        let stats = SegmentStats(
             distance: 2000,
             elevationGain: 300,
             elevationLoss: 0,
@@ -42,7 +40,7 @@ struct AnnouncementBuilderTests {
         let result = AnnouncementBuilder.build(
             type: .montee,
             name: "Col de la Croix",
-            lookaheadStats: stats
+            segmentStats: stats
         )
 
         let message = try #require(result)
@@ -53,8 +51,7 @@ struct AnnouncementBuilderTests {
 
     @Test
     func descente_generatesCorrectMessage() throws {
-        let stats = ElevationProfileAnalyzer.LookaheadStats(
-            terrainType: .descending,
+        let stats = SegmentStats(
             distance: 2500,
             elevationGain: 0,
             elevationLoss: 350,
@@ -64,7 +61,7 @@ struct AnnouncementBuilderTests {
         let result = AnnouncementBuilder.build(
             type: .descente,
             name: nil,
-            lookaheadStats: stats
+            segmentStats: stats
         )
 
         let message = try #require(result)
@@ -78,8 +75,7 @@ struct AnnouncementBuilderTests {
 
     @Test
     func shortDistance_formattedInMeters() throws {
-        let stats = ElevationProfileAnalyzer.LookaheadStats(
-            terrainType: .climbing,
+        let stats = SegmentStats(
             distance: 800,
             elevationGain: 80,
             elevationLoss: 0,
@@ -89,7 +85,7 @@ struct AnnouncementBuilderTests {
         let result = AnnouncementBuilder.build(
             type: .montee,
             name: nil,
-            lookaheadStats: stats
+            segmentStats: stats
         )
 
         let message = try #require(result)
@@ -99,8 +95,7 @@ struct AnnouncementBuilderTests {
 
     @Test
     func wholeKilometer_noDecimal() throws {
-        let stats = ElevationProfileAnalyzer.LookaheadStats(
-            terrainType: .climbing,
+        let stats = SegmentStats(
             distance: 3000,
             elevationGain: 300,
             elevationLoss: 0,
@@ -110,7 +105,7 @@ struct AnnouncementBuilderTests {
         let result = AnnouncementBuilder.build(
             type: .montee,
             name: nil,
-            lookaheadStats: stats
+            segmentStats: stats
         )
 
         let message = try #require(result)
@@ -122,8 +117,7 @@ struct AnnouncementBuilderTests {
 
     @Test
     func nonClimbDescentType_returnsNil() {
-        let stats = ElevationProfileAnalyzer.LookaheadStats(
-            terrainType: .flat,
+        let stats = SegmentStats(
             distance: 2000,
             elevationGain: 10,
             elevationLoss: 5,
@@ -133,7 +127,7 @@ struct AnnouncementBuilderTests {
         let result = AnnouncementBuilder.build(
             type: .plat,
             name: nil,
-            lookaheadStats: stats
+            segmentStats: stats
         )
 
         #expect(result == nil)
@@ -141,8 +135,7 @@ struct AnnouncementBuilderTests {
 
     @Test
     func ravito_returnsNil() {
-        let stats = ElevationProfileAnalyzer.LookaheadStats(
-            terrainType: .climbing,
+        let stats = SegmentStats(
             distance: 2000,
             elevationGain: 200,
             elevationLoss: 0,
@@ -152,7 +145,7 @@ struct AnnouncementBuilderTests {
         let result = AnnouncementBuilder.build(
             type: .ravito,
             name: nil,
-            lookaheadStats: stats
+            segmentStats: stats
         )
 
         #expect(result == nil)
@@ -165,7 +158,7 @@ struct AnnouncementBuilderTests {
         let result = AnnouncementBuilder.build(
             type: .montee,
             name: nil,
-            lookaheadStats: nil
+            segmentStats: nil
         )
 
         #expect(result == nil)

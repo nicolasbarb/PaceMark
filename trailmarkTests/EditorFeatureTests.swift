@@ -1113,10 +1113,10 @@ struct EditorFeatureTests {
         // Tap at start of climbing section (index 10)
         await store.send(.profileTapped(10))
 
-        // Premium user should have message pre-filled
+        // AutoMessage is now always nil (temporary for Task 3)
         #expect(store.state.milestoneSheet != nil)
         #expect(store.state.milestoneSheet!.personalMessage.isEmpty)
-        #expect(store.state.milestoneSheet!.autoMessage != nil)
+        #expect(store.state.milestoneSheet!.autoMessage == nil)
     }
 
     @Test
@@ -1155,10 +1155,10 @@ struct EditorFeatureTests {
 
         await store.send(.profileTapped(10))
 
-        // Free user should have empty personalMessage but autoMessage set
+        // AutoMessage is now always nil (temporary for Task 3)
         #expect(store.state.milestoneSheet != nil)
         #expect(store.state.milestoneSheet!.personalMessage.isEmpty)
-        #expect(store.state.milestoneSheet!.autoMessage != nil)
+        #expect(store.state.milestoneSheet!.autoMessage == nil)
     }
 
     @Test
@@ -1202,7 +1202,7 @@ struct EditorFeatureTests {
             selectedType: .montee,
             personalMessage: "Attention virage",
             name: "",
-            autoMessage: "Montee. 2 kilometres."
+            autoMessage: nil
         )
 
         let store = TestStore(initialState: state) {
@@ -1223,8 +1223,8 @@ struct EditorFeatureTests {
             $0.milestoneSheet?.isPlayingPreview = false
         }
 
-        // TTS reads auto + personal concatenated
-        #expect(spokeMsgs.value == ["Montee. 2 kilometres. Attention virage"])
+        // TTS reads only personal message (no auto message)
+        #expect(spokeMsgs.value == ["Attention virage"])
     }
 
     @Test
@@ -1280,7 +1280,7 @@ struct EditorFeatureTests {
             selectedType: .montee,
             personalMessage: "Attention virage",
             name: "",
-            autoMessage: "Montee. 2 kilometres."
+            autoMessage: nil
         )
 
         let store = TestStore(initialState: state) {
@@ -1313,7 +1313,7 @@ struct EditorFeatureTests {
             elevation: 200,
             distance: 1000,
             type: .montee,
-            message: "Montee. 2 kilometres. Attention virage",
+            message: "Attention virage",
             name: nil
         )
 
@@ -1477,17 +1477,8 @@ struct EditorFeatureTests {
             milestones: []
         )
 
-        let terrainTypes = ElevationProfileAnalyzer.classify(trackPoints: trackPoints)
-        let lookaheadStats = ElevationProfileAnalyzer.computeLookaheadStats(
-            from: 10,
-            trackPoints: trackPoints,
-            terrainTypes: terrainTypes
-        )
-        let expectedAuto = try #require(AnnouncementBuilder.build(
-            type: .montee,
-            name: nil,
-            lookaheadStats: lookaheadStats
-        ))
+        // AutoMessage computation removed (temporary for Task 3)
+        let expectedAuto = "Montee. 2 kilometres a 10 pourcent. 200 metres de denivele positif."
 
         let milestone = Milestone(
             id: 1,
@@ -1514,8 +1505,8 @@ struct EditorFeatureTests {
         await store.send(.editMilestone(milestone))
 
         #expect(store.state.milestoneSheet != nil)
-        #expect(store.state.milestoneSheet?.autoMessage == expectedAuto)
-        #expect(store.state.milestoneSheet?.personalMessage == "Mon complement")
+        #expect(store.state.milestoneSheet?.autoMessage == nil)
+        #expect(store.state.milestoneSheet?.personalMessage == expectedAuto + " Mon complement")
     }
 
     // MARK: - buildFullMessage
