@@ -105,6 +105,21 @@ struct PendingTrailData: Equatable, Sendable {
     var detectedMilestones: [Milestone]
 }
 
+// MARK: - Editor Tool
+
+enum EditorTool: Equatable, Sendable {
+    case segment
+    case repere
+}
+
+// MARK: - Trim State
+
+struct TrimState: Equatable, Sendable {
+    var leftIndex: Int
+    var rightIndex: Int
+    var editingSegmentId: Int64?  // nil = creating, non-nil = editing existing
+}
+
 // MARK: - Editor Feature
 
 @Reducer
@@ -125,6 +140,10 @@ struct EditorFeature {
         // TODO: Réactiver pour gestion batch des milestones
         // var isSelectingMilestones = false
         // var selectedMilestoneIndices: Set<Int> = []
+        var activeTool: EditorTool? = nil
+        var trimState: TrimState? = nil
+        var segments: [Segment] = []
+        var originalSegments: [Segment] = []
         var isSavingInBackground = false
         @Shared(.inMemory("isPremium")) var isPremium = false
         @Presents var alert: AlertState<Action.Alert>?
@@ -172,6 +191,19 @@ struct EditorFeature {
         case trailNameUpdated(String)
         case alert(PresentationAction<Alert>)
         case paywall(PresentationAction<PaywallFeature.Action>)
+
+        // Segment toolbox
+        case toolSelected(EditorTool?)
+        case trimLeftMoved(Int)
+        case trimRightMoved(Int)
+        case trimValidated
+        case autoDetectTapped
+        case segmentTapped(Segment)
+        case _insertSegment(Segment)
+        case _updateSegment(Segment)
+        case _deleteSegmentById(Int64)
+        case _segmentSaved(Segment)
+        case _segmentDeleted(Int64)
 
         // Background save
         case backgroundSaveCompleted(Trail, [Milestone])
@@ -275,6 +307,8 @@ struct EditorFeature {
                 state.trailDetail = detail
                 state.milestones = detail.milestones
                 state.originalMilestones = detail.milestones
+                state.segments = detail.segments
+                state.originalSegments = detail.segments
                 return .none
 
             case let .backgroundSaveCompleted(savedTrail, savedMilestones):
@@ -301,6 +335,106 @@ struct EditorFeature {
                 state.scrolledPointIndex = index
                 return .none
 
+            // MARK: - Segment Toolbox
+
+            case .toolSelected(let tool):
+                state.activeTool = tool
+                if tool == .segment {
+                    let totalPoints = state.trailDetail?.trackPoints.count ?? 0
+                    let center = state.scrolledPointIndex
+                    let offset = max(totalPoints / 7, 20)
+                    state.trimState = TrimState(
+                        leftIndex: max(0, center - offset),
+                        rightIndex: min(totalPoints - 1, center + offset)
+                    )
+                } else {
+                    state.trimState = nil
+                }
+                return .none
+
+            case .trimLeftMoved(let index):
+                guard var trim = state.trimState else { return .none }
+                trim.leftIndex = min(index, trim.rightIndex - 1)
+                trim.leftIndex = max(0, trim.leftIndex)
+                for seg in state.segments where seg.id != trim.editingSegmentId {
+                    if trim.leftIndex >= seg.startIndex && trim.leftIndex <= seg.endIndex {
+                        trim.leftIndex = seg.endIndex + 1
+                    }
+                }
+                state.trimState = trim
+                return .none
+
+            case .trimRightMoved(let index):
+                guard var trim = state.trimState else { return .none }
+                let maxIndex = (state.trailDetail?.trackPoints.count ?? 1) - 1
+                trim.rightIndex = max(index, trim.leftIndex + 1)
+                trim.rightIndex = min(maxIndex, trim.rightIndex)
+                for seg in state.segments where seg.id != trim.editingSegmentId {
+                    if trim.rightIndex >= seg.startIndex && trim.rightIndex <= seg.endIndex {
+                        trim.rightIndex = seg.startIndex - 1
+                    }
+                }
+                state.trimState = trim
+                return .none
+
+            case .trimValidated:
+                // Task 6 will wire the segmentTypeSheet
+                return .none
+
+            case .segmentTapped(let segment):
+                state.activeTool = .segment
+                state.trimState = TrimState(
+                    leftIndex: segment.startIndex,
+                    rightIndex: segment.endIndex,
+                    editingSegmentId: segment.id
+                )
+                return .none
+
+            case .autoDetectTapped:
+                if !state.isPremium {
+                    state.paywall = PaywallFeature.State()
+                    return .none
+                }
+                // PRO: auto-detect segments — will be fully implemented in Task 8
+                return .none
+
+            case ._insertSegment(let segment):
+                return .run { [database] send in
+                    let saved = try await database.insertSegment(segment)
+                    await send(._segmentSaved(saved))
+                }
+
+            case ._updateSegment(let segment):
+                return .run { [database] send in
+                    let saved = try await database.updateSegment(segment)
+                    await send(._segmentSaved(saved))
+                }
+
+            case ._deleteSegmentById(let segmentId):
+                return .run { [database] send in
+                    try await database.deleteSegment(segmentId)
+                    await send(._segmentDeleted(segmentId))
+                }
+
+            case ._segmentSaved(let segment):
+                if let index = state.segments.firstIndex(where: { $0.id == segment.id }) {
+                    state.segments[index] = segment
+                } else {
+                    state.segments.append(segment)
+                    state.segments.sort { $0.startDistance < $1.startDistance }
+                }
+                state.originalSegments = state.segments
+                state.activeTool = nil
+                state.trimState = nil
+                return .none
+
+            case ._segmentDeleted(let segmentId):
+                state.segments.removeAll { $0.id == segmentId }
+                state.originalSegments = state.segments
+                state.activeTool = nil
+                state.trimState = nil
+                return .none
+
             case let .profileTapped(pointIndex):
                 guard let detail = state.trailDetail,
                       pointIndex < detail.trackPoints.count else { return .none }
@@ -319,8 +453,16 @@ struct EditorFeature {
                     trackPoints: detail.trackPoints
                 )
 
-                // For now, pass nil for segmentStats (Task 5 will implement real segment-based lookup)
-                let autoMessage: String? = nil
+                // Compute autoMessage from segments
+                var autoMessage: String? = nil
+                if let segment = Segment.findSegment(containing: pointIndex, in: state.segments) {
+                    let stats = Segment.computeStats(segment: segment, trackPoints: detail.trackPoints)
+                    autoMessage = AnnouncementBuilder.build(
+                        type: detectedType,
+                        name: nil,
+                        segmentStats: stats
+                    )
+                }
 
                 state.milestoneSheet = MilestoneSheetFeature.State(
                     editingMilestone: nil,
@@ -337,9 +479,21 @@ struct EditorFeature {
                 return .none
 
             case let .editMilestone(milestone):
-                // For now, autoMessage is always nil (Task 5 will implement real segment-based lookup)
-                let autoMessage: String? = nil
+                var autoMessage: String? = nil
                 var personalMessage = milestone.message
+                if let segment = Segment.findSegment(containing: milestone.pointIndex, in: state.segments),
+                   let detail = state.trailDetail {
+                    let stats = Segment.computeStats(segment: segment, trackPoints: detail.trackPoints)
+                    autoMessage = AnnouncementBuilder.build(
+                        type: milestone.milestoneType,
+                        name: milestone.name,
+                        segmentStats: stats
+                    )
+                    // Split prefix
+                    if let auto = autoMessage, personalMessage.hasPrefix(auto) {
+                        personalMessage = String(personalMessage.dropFirst(auto.count)).trimmingCharacters(in: .whitespaces)
+                    }
+                }
 
                 state.milestoneSheet = MilestoneSheetFeature.State(
                     editingMilestone: milestone,
@@ -416,8 +570,19 @@ struct EditorFeature {
                 return .none
 
             case .milestoneSheet(.presented(.typeSelected(let type))):
-                // For now, autoMessage is always nil (Task 5 will implement real segment-based lookup)
-                state.milestoneSheet?.autoMessage = nil
+                if let sheet = state.milestoneSheet {
+                    var autoMessage: String? = nil
+                    if let segment = Segment.findSegment(containing: sheet.pointIndex, in: state.segments),
+                       let detail = state.trailDetail {
+                        let stats = Segment.computeStats(segment: segment, trackPoints: detail.trackPoints)
+                        autoMessage = AnnouncementBuilder.build(
+                            type: type,
+                            name: sheet.name.isEmpty ? nil : sheet.name,
+                            segmentStats: stats
+                        )
+                    }
+                    state.milestoneSheet?.autoMessage = autoMessage
+                }
                 return .none
 
             case .milestoneSheet(.presented(.saveButtonTapped)):
