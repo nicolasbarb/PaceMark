@@ -535,11 +535,34 @@ struct EditorFeature {
 
                 let point = detail.trackPoints[pointIndex]
 
-                // Auto-detect type based on elevation change
-                let detectedType = Self.detectMilestoneType(
-                    at: pointIndex,
-                    trackPoints: detail.trackPoints
-                )
+                // Auto-detect type based on segments or elevation change
+                let detectedType: MilestoneType
+                if let segment = Segment.findSegment(containing: pointIndex, in: state.segments) {
+                    // Use segment type if available
+                    switch segment.segmentType {
+                    case .climbing: detectedType = .montee
+                    case .descending: detectedType = .descente
+                    case .flat: detectedType = .plat
+                    }
+                } else {
+                    // Fallback to elevation-based detection
+                    let lookAhead = 20
+                    let futureIndex = min(pointIndex + lookAhead, detail.trackPoints.count - 1)
+                    if futureIndex > pointIndex {
+                        let currentElevation = detail.trackPoints[pointIndex].elevation
+                        let futureElevation = detail.trackPoints[futureIndex].elevation
+                        let delta = futureElevation - currentElevation
+                        if delta > 10 {
+                            detectedType = .montee
+                        } else if delta < -10 {
+                            detectedType = .descente
+                        } else {
+                            detectedType = .plat
+                        }
+                    } else {
+                        detectedType = .plat
+                    }
+                }
 
                 // Compute autoMessage from segments
                 var autoMessage: String? = nil
@@ -921,23 +944,4 @@ struct EditorFeature {
     }
 
     // MARK: - Helpers
-
-    private static func detectMilestoneType(at index: Int, trackPoints: [TrackPoint]) -> MilestoneType {
-        let lookAhead = 20
-        let futureIndex = min(index + lookAhead, trackPoints.count - 1)
-
-        guard futureIndex > index else { return .plat }
-
-        let currentElevation = trackPoints[index].elevation
-        let futureElevation = trackPoints[futureIndex].elevation
-        let delta = futureElevation - currentElevation
-
-        if delta > 10 {
-            return .montee
-        } else if delta < -10 {
-            return .descente
-        } else {
-            return .plat
-        }
-    }
 }
