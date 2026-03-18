@@ -5,7 +5,7 @@ import ComposableArchitecture
 struct MilestoneListFeature {
     @ObservableState
     struct State: Equatable, Sendable {
-        @Shared(.inMemory("editorMilestones")) var milestones: [Milestone] = []
+        // Milestones are passed from parent, not @Shared
     }
 
     enum Action: Equatable {
@@ -13,6 +13,7 @@ struct MilestoneListFeature {
 
         enum Delegate: Equatable {
             case goToMilestone(Milestone)
+            case editMilestone(Milestone)
         }
         case delegate(Delegate)
     }
@@ -21,7 +22,10 @@ struct MilestoneListFeature {
         Reduce { state, action in
             switch action {
             case let .milestoneTapped(milestone):
-                return .send(.delegate(.goToMilestone(milestone)))
+                return .merge(
+                    .send(.delegate(.goToMilestone(milestone))),
+                    .send(.delegate(.editMilestone(milestone)))
+                )
 
             case .delegate:
                 return .none
