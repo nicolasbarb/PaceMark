@@ -112,7 +112,7 @@ struct EditorView: View {
             item: $store.scope(state: \.milestoneSheet, action: \.milestoneSheet)
         ) { sheetStore in
             MilestoneSheetView(store: sheetStore)
-                .presentationDetents([.medium, .large], selection: .constant(.large))
+                .presentationDetents([.large])
                 .presentationBackground(TM.bgCard)
                 .onDisappear {
                     highlightedMilestoneId = nil
