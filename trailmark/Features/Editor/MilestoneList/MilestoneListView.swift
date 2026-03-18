@@ -3,15 +3,18 @@ import ComposableArchitecture
 
 struct MilestoneListView: View {
     @Bindable var store: StoreOf<MilestoneListFeature>
+    let milestones: [Milestone]
+    var onGoToMilestone: ((Milestone) -> Void)?
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 LazyVStack(spacing: 0) {
-                    ForEach(store.milestones) { milestone in
+                    ForEach(milestones) { milestone in
                         Button {
                             Haptic.medium.trigger()
+                            onGoToMilestone?(milestone)
                             store.send(.milestoneTapped(milestone))
                         } label: {
                             HStack(spacing: 10) {
@@ -41,7 +44,7 @@ struct MilestoneListView: View {
                             .padding(.vertical, 12)
                         }
 
-                        if milestone.id != store.milestones.last?.id {
+                        if milestone.id != milestones.last?.id {
                             Divider()
                                 .padding(.leading, 54)
                         }
@@ -77,7 +80,8 @@ struct MilestoneListView: View {
             initialState: MilestoneListFeature.State()
         ) {
             MilestoneListFeature()
-        }
+        },
+        milestones: []
     )
     .presentationBackground(TM.bgCard)
 }
