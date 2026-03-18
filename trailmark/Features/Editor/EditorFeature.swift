@@ -2,101 +2,6 @@ import Foundation
 import ComposableArchitecture
 import CoreLocation
 
-// MARK: - MilestoneSheet Reducer
-
-@Reducer
-struct MilestoneSheetFeature {
-    @ObservableState
-    struct State: Equatable, Sendable, Identifiable {
-        var id: UUID = UUID()
-        var editingMilestone: Milestone?
-        var pointIndex: Int
-        var latitude: Double
-        var longitude: Double
-        var elevation: Double
-        var distance: Double
-        var selectedType: MilestoneType
-        var personalMessage: String
-        var name: String
-        var autoMessage: String? = nil
-        var isPlayingPreview = false
-        @Shared(.inMemory("isPremium")) var isPremium = false
-
-        var isEditing: Bool { editingMilestone != nil }
-    }
-
-    static func buildFullMessage(
-        autoMessage: String?,
-        personalMessage: String,
-        includeAuto: Bool
-    ) -> String? {
-        var parts: [String] = []
-        if includeAuto, let auto = autoMessage, !auto.isEmpty {
-            parts.append(auto)
-        }
-        if !personalMessage.isEmpty {
-            parts.append(personalMessage)
-        }
-        return parts.isEmpty ? nil : parts.joined(separator: " ")
-    }
-
-    enum Action: BindableAction, Equatable {
-        case binding(BindingAction<State>)
-        case typeSelected(MilestoneType)
-        case saveButtonTapped
-        case deleteButtonTapped
-        case dismissTapped
-        case previewTTSTapped
-        case stopTTSTapped
-        case ttsFinished
-    }
-
-    @Dependency(\.speech) var speech
-
-    private enum CancelID { case ttsPreview }
-
-    var body: some Reducer<State, Action> {
-        BindingReducer()
-        Reduce { state, action in
-            switch action {
-            case .binding:
-                return .none
-            case .typeSelected(let type):
-                state.selectedType = type
-                return .none
-            case .saveButtonTapped:
-                return .none
-            case .deleteButtonTapped:
-                return .none
-            case .dismissTapped:
-                speech.stop()
-                return .cancel(id: CancelID.ttsPreview)
-            case .previewTTSTapped:
-                guard !(state.autoMessage ?? "").isEmpty || !state.personalMessage.isEmpty else { return .none }
-                state.isPlayingPreview = true
-                let fullMessage = Self.buildFullMessage(
-                    autoMessage: state.autoMessage,
-                    personalMessage: state.personalMessage,
-                    includeAuto: true
-                )!
-                return .run { send in
-                    try? speech.configureAudioSession()
-                    await speech.speak(fullMessage)
-                    await send(.ttsFinished)
-                }
-                .cancellable(id: CancelID.ttsPreview)
-            case .stopTTSTapped:
-                state.isPlayingPreview = false
-                speech.stop()
-                return .cancel(id: CancelID.ttsPreview)
-            case .ttsFinished:
-                state.isPlayingPreview = false
-                return .none
-            }
-        }
-    }
-}
-
 // MARK: - Pending Trail Data (données non sauvegardées)
 
 struct PendingTrailData: Equatable, Sendable {
@@ -105,7 +10,7 @@ struct PendingTrailData: Equatable, Sendable {
     var detectedMilestones: [Milestone]
 }
 
-// MARK: - Editor Feature
+// MARK: - Editor Feature (Parent Coordinator)
 
 @Reducer
 struct EditorFeature {
@@ -116,24 +21,19 @@ struct EditorFeature {
         var pendingData: PendingTrailData?
 
         var trailDetail: TrailDetail?
-        var cursorPointIndex: Int?
-        var scrolledPointIndex: Int = 0
         var milestones: [Milestone] = []
         var originalMilestones: [Milestone] = []
-        var isRenamingTrail = false
-        var editedTrailName = ""
-        // TODO: Réactiver pour gestion batch des milestones
-        // var isSelectingMilestones = false
-        // var selectedMilestoneIndices: Set<Int> = []
         var isSavingInBackground = false
         @Shared(.inMemory("isPremium")) var isPremium = false
-        @Presents var alert: AlertState<Action.Alert>?
+
+        // Child features
+        var elevationProfile = ElevationProfileFeature.State()
+        var trailMetadata = TrailMetadataFeature.State()
+        var segmentPanel = SegmentPanelFeature.State()
+
+        // Presentations
         @Presents var milestoneSheet: MilestoneSheetFeature.State?
         @Presents var paywall: PaywallFeature.State?
-
-        var hasMilestoneChanges: Bool {
-            milestones != originalMilestones
-        }
 
         // Init pour un trail existant
         init(trailId: Int64) {
@@ -148,70 +48,54 @@ struct EditorFeature {
         }
     }
 
-    enum Action: BindableAction, Equatable {
-        case binding(BindingAction<State>)
+    enum Action: Equatable {
         case onAppear
         case trailLoaded(TrailDetail)
-        case cursorMoved(Int?)
-        case scrollPositionChanged(Int)
-        case profileTapped(Int)
-        case saveButtonTapped
-        case savingCompleted([Milestone])
-        case milestoneSheet(PresentationAction<MilestoneSheetFeature.Action>)
-        case deleteMilestone(Int)
-        case editMilestone(Milestone)
-        // TODO: Réactiver pour gestion batch des milestones
-        // case toggleSelectionMode
-        // case toggleMilestoneSelection(Int)
-        // case deleteSelectedMilestones
-        case backTapped
-        case deleteTrailButtonTapped
-        case renameButtonTapped
-        case renameConfirmed
-        case renameCancelled
-        case trailNameUpdated(String)
-        case alert(PresentationAction<Alert>)
-        case paywall(PresentationAction<PaywallFeature.Action>)
-
-        // Background save
         case backgroundSaveCompleted(Trail, [Milestone])
         case backgroundSaveFailed
+        case savingCompleted([Milestone])
 
-        @CasePathable
-        enum Alert: Sendable {
-            case confirmDelete
-        }
+        // Child features
+        case elevationProfile(ElevationProfileFeature.Action)
+        case trailMetadata(TrailMetadataFeature.Action)
+        case segmentPanel(SegmentPanelFeature.Action)
 
-        // MARK: - Internal actions (for testability)
+        // Presentations
+        case milestoneSheet(PresentationAction<MilestoneSheetFeature.Action>)
+        case paywall(PresentationAction<PaywallFeature.Action>)
+
+        // Internal
         case _loadTrailDetail
         case _loadPendingData
         case _saveMilestones
-        case _removeMilestoneAt(Int)
-        // TODO: Réactiver pour gestion batch des milestones
-        // case _removeSelectedMilestones
         case _addMilestone(Milestone)
         case _updateMilestone(Int64, MilestoneType, String, String?)
-        case _updateTrailName(String)
-        case _deleteTrail
+        case _removeMilestoneAt(Int)
     }
 
     @Dependency(\.database) var database
     @Dependency(\.dismiss) var dismiss
 
     var body: some Reducer<State, Action> {
-        BindingReducer()
+        Scope(state: \.elevationProfile, action: \.elevationProfile) {
+            ElevationProfileFeature()
+        }
+        Scope(state: \.trailMetadata, action: \.trailMetadata) {
+            TrailMetadataFeature()
+        }
+        Scope(state: \.segmentPanel, action: \.segmentPanel) {
+            SegmentPanelFeature()
+        }
 
         Reduce { state, action in
             switch action {
-            case .binding:
-                return .none
+
+            // MARK: - Lifecycle
 
             case .onAppear:
-                // Mode 1: Trail existant - charger depuis la DB
                 if state.trailId != nil {
                     return .send(._loadTrailDetail)
                 }
-                // Mode 2: Nouveau trail - utiliser les données en mémoire
                 if state.pendingData != nil {
                     return .send(._loadPendingData)
                 }
@@ -227,7 +111,6 @@ struct EditorFeature {
             case ._loadPendingData:
                 guard let pending = state.pendingData else { return .none }
 
-                // Créer un TrailDetail temporaire pour l'affichage
                 let detail = TrailDetail(
                     trail: pending.trail,
                     trackPoints: pending.trackPoints,
@@ -237,16 +120,13 @@ struct EditorFeature {
                 state.milestones = pending.detectedMilestones
                 state.originalMilestones = pending.detectedMilestones
                 state.isSavingInBackground = true
+                // Sync child state
+                state.trailMetadata.trailName = pending.trail.name
 
-                // Lancer la sauvegarde en arrière-plan
                 return .run { [pending] send in
                     do {
-                        // 1. Sauvegarder le trail et les trackpoints
                         let savedTrail = try await database.insertTrail(pending.trail, pending.trackPoints)
-
-                        // 2. Sauvegarder les milestones si présents
                         if let trailId = savedTrail.id, !pending.detectedMilestones.isEmpty {
-                            // Mettre à jour les milestones avec le bon trailId
                             let milestonesWithTrailId = pending.detectedMilestones.map { milestone in
                                 Milestone(
                                     id: nil,
@@ -275,6 +155,9 @@ struct EditorFeature {
                 state.trailDetail = detail
                 state.milestones = detail.milestones
                 state.originalMilestones = detail.milestones
+                // Sync child state
+                state.trailMetadata.trailId = state.trailId
+                state.trailMetadata.trailName = detail.trail.name
                 return .none
 
             case let .backgroundSaveCompleted(savedTrail, savedMilestones):
@@ -286,40 +169,61 @@ struct EditorFeature {
                     state.milestones = savedMilestones
                     state.originalMilestones = savedMilestones
                 }
+                // Sync child state
+                state.trailMetadata.trailId = savedTrail.id
+                state.trailMetadata.trailName = savedTrail.name
                 return .none
 
             case .backgroundSaveFailed:
                 state.isSavingInBackground = false
-                // TODO: Gérer l'erreur (afficher une alerte ?)
                 return .none
 
-            case let .cursorMoved(index):
-                state.cursorPointIndex = index
+            // MARK: - Milestone CRUD
+
+            case ._saveMilestones:
+                guard let trailId = state.trailId else { return .none }
+                return .run { [milestones = state.milestones] send in
+                    let saved = try await database.saveMilestones(trailId, milestones)
+                    await send(.savingCompleted(saved))
+                }
+
+            case let .savingCompleted(savedMilestones):
+                state.milestones = savedMilestones
+                state.originalMilestones = savedMilestones
                 return .none
 
-            case let .scrollPositionChanged(index):
-                state.scrolledPointIndex = index
+            case let ._addMilestone(milestone):
+                state.milestones.append(milestone)
+                state.milestones.sort { $0.distance < $1.distance }
                 return .none
 
-            case let .profileTapped(pointIndex):
+            case let ._updateMilestone(id, type, message, name):
+                guard let index = state.milestones.firstIndex(where: { $0.id == id }) else {
+                    return .none
+                }
+                state.milestones[index].type = type.rawValue
+                state.milestones[index].message = message
+                state.milestones[index].name = name
+                return .none
+
+            case let ._removeMilestoneAt(index):
+                guard index < state.milestones.count else { return .none }
+                state.milestones.remove(at: index)
+                return .none
+
+            // MARK: - ElevationProfile Delegates
+
+            case let .elevationProfile(.delegate(.profileTapped(pointIndex))):
                 guard let detail = state.trailDetail,
                       pointIndex < detail.trackPoints.count else { return .none }
 
-                // Free users: max 10 milestones
                 if !state.isPremium && state.milestones.count >= 10 {
                     state.paywall = PaywallFeature.State()
                     return .none
                 }
 
                 let point = detail.trackPoints[pointIndex]
-
-                // Auto-detect type based on elevation change
-                let detectedType = Self.detectMilestoneType(
-                    at: pointIndex,
-                    trackPoints: detail.trackPoints
-                )
-
-                // Compute lookahead stats and build premium message
+                let detectedType = Self.detectMilestoneType(at: pointIndex, trackPoints: detail.trackPoints)
                 let terrainTypes = ElevationProfileAnalyzer.classify(trackPoints: detail.trackPoints)
                 let lookaheadStats = ElevationProfileAnalyzer.computeLookaheadStats(
                     from: pointIndex,
@@ -346,8 +250,10 @@ struct EditorFeature {
                 )
                 return .none
 
-            case let .editMilestone(milestone):
-                // Recompute autoMessage from current terrain data
+            case let .elevationProfile(.delegate(.milestoneTapped(milestone))):
+                return .send(.elevationProfile(.delegate(.editMilestone(milestone))))
+
+            case let .elevationProfile(.delegate(.editMilestone(milestone))):
                 var autoMessage: String? = nil
                 var personalMessage = milestone.message
                 if let detail = state.trailDetail {
@@ -362,8 +268,6 @@ struct EditorFeature {
                         name: milestone.name,
                         lookaheadStats: lookaheadStats
                     )
-
-                    // Split: if saved message starts with auto prefix, strip it
                     if let auto = autoMessage, personalMessage.hasPrefix(auto) {
                         let remainder = String(personalMessage.dropFirst(auto.count))
                             .trimmingCharacters(in: .whitespaces)
@@ -385,68 +289,40 @@ struct EditorFeature {
                 )
                 return .none
 
-            case let .deleteMilestone(index):
-                return .concatenate(
-                    .send(._removeMilestoneAt(index)),
-                    .send(._saveMilestones)
-                )
-
-            case let ._removeMilestoneAt(index):
-                guard index < state.milestones.count else { return .none }
-                state.milestones.remove(at: index)
+            case .elevationProfile:
                 return .none
 
-            // TODO: Réactiver pour gestion batch des milestones
-            // case .toggleSelectionMode:
-            //     state.isSelectingMilestones.toggle()
-            //     if !state.isSelectingMilestones {
-            //         state.selectedMilestoneIndices.removeAll()
-            //     }
-            //     return .none
+            // MARK: - TrailMetadata Delegates
 
-            // case let .toggleMilestoneSelection(index):
-            //     if state.selectedMilestoneIndices.contains(index) {
-            //         state.selectedMilestoneIndices.remove(index)
-            //     } else {
-            //         state.selectedMilestoneIndices.insert(index)
-            //     }
-            //     return .none
+            case .trailMetadata(.delegate(.trailDeleted)):
+                return .run { _ in await dismiss() }
 
-            // case .deleteSelectedMilestones:
-            //     return .concatenate(
-            //         .send(._removeSelectedMilestones),
-            //         .send(._saveMilestones)
-            //     )
-
-            // case ._removeSelectedMilestones:
-            //     let indicesToDelete = state.selectedMilestoneIndices.sorted(by: >)
-            //     for index in indicesToDelete {
-            //         if index < state.milestones.count {
-            //             state.milestones.remove(at: index)
-            //         }
-            //     }
-            //     state.selectedMilestoneIndices.removeAll()
-            //     state.isSelectingMilestones = false
-            //     return .none
-
-            case .saveButtonTapped:
-                return .send(._saveMilestones)
-
-            case ._saveMilestones:
-                // Ne sauvegarder que si on a un trailId (données déjà en DB)
-                guard let trailId = state.trailId else { return .none }
-                return .run { [milestones = state.milestones] send in
-                    let saved = try await database.saveMilestones(trailId, milestones)
-                    await send(.savingCompleted(saved))
-                }
-
-            case let .savingCompleted(savedMilestones):
-                state.milestones = savedMilestones
-                state.originalMilestones = savedMilestones
+            case let .trailMetadata(.delegate(.trailRenamed(newName))):
+                state.trailDetail?.trail.name = newName
+                state.pendingData?.trail.name = newName
                 return .none
+
+            case .trailMetadata:
+                return .none
+
+            // MARK: - SegmentPanel Delegates
+
+            case .segmentPanel(.delegate(.addMilestoneTapped)):
+                let index = state.elevationProfile.scrolledPointIndex
+                return .send(.elevationProfile(.delegate(.profileTapped(index))))
+
+            case let .segmentPanel(.delegate(.goToMilestone(milestone))):
+                return .none // View handles scrolling
+
+            case let .segmentPanel(.delegate(.editMilestone(milestone))):
+                return .send(.elevationProfile(.delegate(.editMilestone(milestone))))
+
+            case .segmentPanel:
+                return .none
+
+            // MARK: - MilestoneSheet
 
             case .milestoneSheet(.presented(.typeSelected(let type))):
-                // Recompute autoMessage for new type
                 if let sheet = state.milestoneSheet, let detail = state.trailDetail {
                     let terrainTypes = ElevationProfileAnalyzer.classify(trackPoints: detail.trackPoints)
                     let lookaheadStats = ElevationProfileAnalyzer.computeLookaheadStats(
@@ -477,9 +353,9 @@ struct EditorFeature {
                 state.milestoneSheet = nil
 
                 if let existingMilestone = sheet.editingMilestone,
-                   existingMilestone.id != nil {
+                   let milestoneId = existingMilestone.id {
                     return .concatenate(
-                        .send(._updateMilestone(existingMilestone.id!, sheet.selectedType, fullMessage, name)),
+                        .send(._updateMilestone(milestoneId, sheet.selectedType, fullMessage, name)),
                         .send(._saveMilestones)
                     )
                 } else {
@@ -501,20 +377,6 @@ struct EditorFeature {
                     )
                 }
 
-            case let ._addMilestone(milestone):
-                state.milestones.append(milestone)
-                state.milestones.sort { $0.distance < $1.distance }
-                return .none
-
-            case let ._updateMilestone(id, type, message, name):
-                guard let index = state.milestones.firstIndex(where: { $0.id == id }) else {
-                    return .none
-                }
-                state.milestones[index].type = type.rawValue
-                state.milestones[index].message = message
-                state.milestones[index].name = name
-                return .none
-
             case .milestoneSheet(.presented(.deleteButtonTapped)):
                 guard let sheet = state.milestoneSheet,
                       let editingMilestone = sheet.editingMilestone,
@@ -533,84 +395,7 @@ struct EditorFeature {
                 state.milestoneSheet = nil
                 return .none
 
-            case .milestoneSheet(.presented(.binding)):
-                return .none
-
-            case .milestoneSheet(.presented(.previewTTSTapped)),
-                 .milestoneSheet(.presented(.stopTTSTapped)),
-                 .milestoneSheet(.presented(.ttsFinished)):
-                return .none
-
-            case .milestoneSheet(.dismiss):
-                return .none
-
-            case .backTapped:
-                return .run { _ in
-                    await dismiss()
-                }
-
-            case .deleteTrailButtonTapped:
-                state.alert = AlertState {
-                    TextState("Supprimer ce parcours ?")
-                } actions: {
-                    ButtonState(role: .cancel) {
-                        TextState("Annuler")
-                    }
-                    ButtonState(role: .destructive, action: .confirmDelete) {
-                        TextState("Supprimer")
-                    }
-                } message: {
-                    TextState("Cette action supprimera définitivement le parcours et tous ses repères.")
-                }
-                return .none
-
-            case .renameButtonTapped:
-                state.editedTrailName = state.trailDetail?.trail.name ?? ""
-                state.isRenamingTrail = true
-                return .none
-
-            case .renameConfirmed:
-                state.isRenamingTrail = false
-                let newName = state.editedTrailName.trimmingCharacters(in: .whitespacesAndNewlines)
-                guard !newName.isEmpty else { return .none }
-                // Ne renommer que si on a un trailId
-                guard state.trailId != nil else {
-                    // Pour un pending trail, juste mettre à jour localement
-                    state.trailDetail?.trail.name = newName
-                    state.pendingData?.trail.name = newName
-                    return .none
-                }
-                return .send(._updateTrailName(newName))
-
-            case let ._updateTrailName(newName):
-                guard let trailId = state.trailId else { return .none }
-                return .run { send in
-                    try await database.updateTrailName(trailId, newName)
-                    await send(.trailNameUpdated(newName))
-                }
-
-            case .renameCancelled:
-                state.isRenamingTrail = false
-                return .none
-
-            case let .trailNameUpdated(newName):
-                state.trailDetail?.trail.name = newName
-                return .none
-
-            case .alert(.presented(.confirmDelete)):
-                return .send(._deleteTrail)
-
-            case ._deleteTrail:
-                guard let trailId = state.trailId else {
-                    // Si pas encore sauvé, juste fermer
-                    return .run { _ in await dismiss() }
-                }
-                return .run { _ in
-                    try await database.deleteTrail(trailId)
-                    await dismiss()
-                }
-
-            case .alert:
+            case .milestoneSheet:
                 return .none
 
             // MARK: - Paywall
@@ -628,7 +413,6 @@ struct EditorFeature {
                 return .none
             }
         }
-        .ifLet(\.$alert, action: \.alert)
         .ifLet(\.$milestoneSheet, action: \.milestoneSheet) {
             MilestoneSheetFeature()
         }
@@ -639,22 +423,15 @@ struct EditorFeature {
 
     // MARK: - Helpers
 
-    private static func detectMilestoneType(at index: Int, trackPoints: [TrackPoint]) -> MilestoneType {
+    static func detectMilestoneType(at index: Int, trackPoints: [TrackPoint]) -> MilestoneType {
         let lookAhead = 20
         let futureIndex = min(index + lookAhead, trackPoints.count - 1)
-
         guard futureIndex > index else { return .plat }
-
         let currentElevation = trackPoints[index].elevation
         let futureElevation = trackPoints[futureIndex].elevation
         let delta = futureElevation - currentElevation
-
-        if delta > 10 {
-            return .montee
-        } else if delta < -10 {
-            return .descente
-        } else {
-            return .plat
-        }
+        if delta > 10 { return .montee }
+        else if delta < -10 { return .descente }
+        else { return .plat }
     }
 }

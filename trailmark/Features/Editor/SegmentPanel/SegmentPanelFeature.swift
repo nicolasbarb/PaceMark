@@ -6,7 +6,6 @@ struct SegmentPanelFeature {
     @ObservableState
     struct State: Equatable, Sendable {
         var currentScrollIndex: Int = 0
-        @Shared(.inMemory("editorMilestones")) var milestones: [Milestone] = []
         @Presents var milestoneList: MilestoneListFeature.State?
     }
 
@@ -19,6 +18,7 @@ struct SegmentPanelFeature {
         enum Delegate: Equatable {
             case addMilestoneTapped
             case goToMilestone(Milestone)
+            case editMilestone(Milestone)
         }
         case delegate(Delegate)
     }
@@ -37,11 +37,11 @@ struct SegmentPanelFeature {
                 state.milestoneList = MilestoneListFeature.State()
                 return .none
 
-            case .milestoneList(.presented(.delegate(let delegateAction))):
-                switch delegateAction {
-                case let .goToMilestone(milestone):
-                    return .send(.delegate(.goToMilestone(milestone)))
-                }
+            case let .milestoneList(.presented(.delegate(.goToMilestone(milestone)))):
+                return .send(.delegate(.goToMilestone(milestone)))
+
+            case let .milestoneList(.presented(.delegate(.editMilestone(milestone)))):
+                return .send(.delegate(.editMilestone(milestone)))
 
             case .milestoneList:
                 return .none

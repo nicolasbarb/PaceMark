@@ -3,7 +3,9 @@ import ComposableArchitecture
 
 struct SegmentPanelView: View {
     @Bindable var store: StoreOf<SegmentPanelFeature>
+    let milestones: [Milestone]
     let statsData: ProfileStatsData?
+    var onGoToMilestone: ((Milestone) -> Void)?
 
     private var currentSegment: ProfileStatsData.SegmentData? {
         guard let stats = statsData else { return nil }
@@ -35,14 +37,14 @@ struct SegmentPanelView: View {
                     } label: {
                         Image(systemName: "list.bullet")
                             .font(.system(size: 14, weight: .semibold))
-                            .foregroundStyle(store.milestones.isEmpty ? TM.textTertiary : TM.textPrimary)
+                            .foregroundStyle(milestones.isEmpty ? TM.textTertiary : TM.textPrimary)
                             .frame(width: 44, height: 44)
                             .glassEffect(.regular, in: .circle)
                     }
-                    .disabled(store.milestones.isEmpty)
+                    .disabled(milestones.isEmpty)
                     .overlay(alignment: .topTrailing) {
-                        if !store.milestones.isEmpty {
-                            Text("\(store.milestones.count)")
+                        if !milestones.isEmpty {
+                            Text("\(milestones.count)")
                                 .font(.system(size: 9, weight: .bold, design: .monospaced))
                                 .foregroundStyle(.white)
                                 .frame(width: 16, height: 16)
@@ -91,9 +93,13 @@ struct SegmentPanelView: View {
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
             .sheet(item: $store.scope(state: \.milestoneList, action: \.milestoneList)) { listStore in
-                MilestoneListView(store: listStore)
-                    .presentationDetents([.medium, .large], selection: .constant(.large))
-                    .presentationBackground(TM.bgCard)
+                MilestoneListView(
+                    store: listStore,
+                    milestones: milestones,
+                    onGoToMilestone: onGoToMilestone
+                )
+                .presentationDetents([.medium, .large], selection: .constant(.large))
+                .presentationBackground(TM.bgCard)
             }
         }
     }
@@ -118,6 +124,7 @@ struct SegmentPanelView: View {
             ) {
                 SegmentPanelFeature()
             },
+            milestones: [],
             statsData: nil
         )
     }

@@ -7,8 +7,6 @@ struct ElevationProfileFeature {
     struct State: Equatable, Sendable {
         var cursorPointIndex: Int?
         var scrolledPointIndex: Int = 0
-        @Shared(.inMemory("editorTrailDetail")) var trailDetail: TrailDetail?
-        @Shared(.inMemory("editorMilestones")) var milestones: [Milestone] = []
     }
 
     enum Action: Equatable {
@@ -17,10 +15,10 @@ struct ElevationProfileFeature {
         case profileTapped(Int)
         case milestoneTapped(Milestone)
 
-        // Delegate actions for parent
         enum Delegate: Equatable {
             case profileTapped(Int)
             case milestoneTapped(Milestone)
+            case editMilestone(Milestone)
         }
         case delegate(Delegate)
     }
