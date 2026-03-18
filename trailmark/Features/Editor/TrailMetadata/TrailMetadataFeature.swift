@@ -7,8 +7,8 @@ struct TrailMetadataFeature {
     struct State: Equatable, Sendable {
         var isRenamingTrail = false
         var editedTrailName = ""
-        @Shared(.inMemory("editorTrailDetail")) var trailDetail: TrailDetail?
-        @Shared(.inMemory("editorTrailId")) var trailId: Int64?
+        var trailId: Int64?
+        var trailName: String = ""
         @Presents var alert: AlertState<Action.Alert>?
     }
 
@@ -28,12 +28,12 @@ struct TrailMetadataFeature {
 
         enum Delegate: Equatable {
             case trailDeleted
+            case trailRenamed(String)
         }
         case delegate(Delegate)
     }
 
     @Dependency(\.database) var database
-    @Dependency(\.dismiss) var dismiss
 
     var body: some Reducer<State, Action> {
         BindingReducer()
@@ -43,7 +43,7 @@ struct TrailMetadataFeature {
                 return .none
 
             case .renameButtonTapped:
-                state.editedTrailName = state.trailDetail?.trail.name ?? ""
+                state.editedTrailName = state.trailName
                 state.isRenamingTrail = true
                 return .none
 
@@ -52,8 +52,8 @@ struct TrailMetadataFeature {
                 let newName = state.editedTrailName.trimmingCharacters(in: .whitespacesAndNewlines)
                 guard !newName.isEmpty else { return .none }
                 guard let trailId = state.trailId else {
-                    state.$trailDetail.withLock { $0?.trail.name = newName }
-                    return .none
+                    state.trailName = newName
+                    return .send(.delegate(.trailRenamed(newName)))
                 }
                 return .run { send in
                     try await database.updateTrailName(trailId, newName)
@@ -65,8 +65,8 @@ struct TrailMetadataFeature {
                 return .none
 
             case let .trailNameUpdated(newName):
-                state.$trailDetail.withLock { $0?.trail.name = newName }
-                return .none
+                state.trailName = newName
+                return .send(.delegate(.trailRenamed(newName)))
 
             case .deleteTrailButtonTapped:
                 state.alert = AlertState {
@@ -85,7 +85,7 @@ struct TrailMetadataFeature {
 
             case .alert(.presented(.confirmDelete)):
                 guard let trailId = state.trailId else {
-                    return .run { _ in await dismiss() }
+                    return .send(.delegate(.trailDeleted))
                 }
                 return .run { send in
                     try await database.deleteTrail(trailId)
