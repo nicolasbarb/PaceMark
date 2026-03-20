@@ -73,6 +73,8 @@ struct RunStore {
     @Dependency(\.dismiss) var dismiss
 
     var body: some Reducer<State, Action> {
+        RunAnalyticsReducer()
+
         Reduce { state, action in
             switch action {
             // MARK: - Public actions
