@@ -167,6 +167,16 @@ Le TTS joue dans les écouteurs même en background et baisse le volume de la mu
 - Boucle sur les jalons non déclenchés à chaque update GPS
 - Déclenchement → TTS immédiat
 
+## Worktrees & secrets
+
+`Secrets.xcconfig` est gitignored. Quand tu travailles dans un worktree, crée un symlink vers le fichier du repo principal :
+
+```bash
+ln -s "$(git rev-parse --git-common-dir)/../Secrets.xcconfig" Secrets.xcconfig
+```
+
+Cela garantit que tous les worktrees partagent les mêmes clés API.
+
 ## Tests à écrire
 - `GPXParser` : fichier valide, vide, invalide, avec `<rtept>`
 - Chaque reducer : `TestStore` TCA avec dependencies mockées
