@@ -437,11 +437,9 @@ struct EditorStore {
 
     /// Handle save from any MilestoneSheetStore
     private func handleMilestoneSave(sheet: MilestoneSheetStore.State, state: inout State) -> Effect<Action> {
-        let fullMessage = MilestoneSheetStore.buildFullMessage(
-            autoMessage: sheet.autoMessage,
-            personalMessage: sheet.personalMessage,
-            includeAuto: sheet.useAutoAnnouncement
-        ) ?? sheet.selectedType.label
+        let fullMessage = sheet.personalMessage.isEmpty
+            ? sheet.selectedType.label
+            : sheet.personalMessage
         let name: String? = sheet.name.isEmpty ? nil : sheet.name
         let currentTrailId = state.trailId ?? 0
 

@@ -85,10 +85,14 @@ struct MilestoneSheetStore {
                 return .none
             case .useAutoMessage:
                 state.useAutoAnnouncement = true
+                if let auto = state.autoMessage {
+                    state.personalMessage = auto
+                }
                 state.step = .editing
                 return .none
             case .writeOwnMessage:
                 state.useAutoAnnouncement = false
+                state.personalMessage = ""
                 state.step = .editing
                 return .none
             case .dismissTapped:

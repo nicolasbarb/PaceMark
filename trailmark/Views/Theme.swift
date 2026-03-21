@@ -27,7 +27,7 @@ enum TM {
 
     // MARK: Accents
     /// App accent color - orange for trail/outdoor theme
-    static let accent = Color.orange
+    static let accent = Color.accentColor
     /// Darker accent variant
     static let accentDark = Color(uiColor: .systemOrange).opacity(0.85)
     /// GPS trace color - cyan for visibility

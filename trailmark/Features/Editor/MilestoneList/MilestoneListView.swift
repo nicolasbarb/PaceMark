@@ -37,8 +37,6 @@ struct MilestoneListView: View {
                 item: $store.scope(state: \.milestoneSheet, action: \.milestoneSheet)
             ) { sheetStore in
                 MilestoneSheetView(store: sheetStore)
-                    .presentationDetents([.large])
-                    .presentationBackground(TM.bgCard)
             }
         }
     }
