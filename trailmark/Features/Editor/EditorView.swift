@@ -52,12 +52,7 @@ struct EditorView: View {
             }
             if store.isPremium {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Text("PRO")
-                        .font(.system(size: 9, weight: .bold, design: .monospaced))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 5)
-                        .padding(.vertical, 3)
-                        .background(TM.accent, in: RoundedRectangle(cornerRadius: 4))
+                    ProBadge()
                 }
             }
             ToolbarSpacer(.fixed, placement: .topBarTrailing)
@@ -112,8 +107,6 @@ struct EditorView: View {
             item: $store.scope(state: \.milestoneSheet, action: \.milestoneSheet)
         ) { sheetStore in
             MilestoneSheetView(store: sheetStore)
-                .presentationDetents([.large])
-                .presentationBackground(TM.bgCard)
                 .onDisappear {
                     highlightedMilestoneId = nil
                 }
