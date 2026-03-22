@@ -47,6 +47,7 @@ fastlane/builds/
 
 # Secrets
 Secrets.xcconfig
+.mcp.json
 
 # Code Injection
 iOSInjectionProject/
