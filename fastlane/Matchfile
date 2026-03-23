@@ -2,7 +2,7 @@
 
 # Git repository URL for storing certificates and provisioning profiles
 # Shared with Holfy (same Apple Developer account)
-git_url("REDACTED_MATCH_URL")
+git_url(ENV["MATCH_GIT_URL"])
 
 # Storage mode
 storage_mode("git")
@@ -11,10 +11,10 @@ storage_mode("git")
 app_identifier(["com.nbarb.trailmark"])
 
 # Your Apple Developer Team ID
-team_id("REDACTED_TEAM_ID")
+team_id(ENV["TEAM_ID"])
 
 # Username (Apple ID email)
-username("nicolas.barb.pro@gmail.com")
+username(ENV["APPLE_ID"])
 
 # Platform
 platform("ios")

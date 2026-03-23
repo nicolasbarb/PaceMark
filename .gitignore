@@ -48,6 +48,10 @@ fastlane/builds/
 # Secrets
 Secrets.xcconfig
 .mcp.json
+.superpowers/
+CLAUDE.md
+.claude/
+fastlane/.env
 
 # Code Injection
 iOSInjectionProject/
