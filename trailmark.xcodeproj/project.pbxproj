@@ -219,9 +219,10 @@
 				};
 			};
 			buildConfigurationList = 3F78729B2F445DC200FB9399 /* Build configuration list for PBXProject "trailmark" */;
-			developmentRegion = fr;
+			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
+				en,
 				fr,
 				Base,
 			);
@@ -445,9 +446,6 @@
 				INFOPLIST_FILE = Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = PaceMark;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.sports";
-				INFOPLIST_KEY_NSLocationAlwaysAndWhenInUseUsageDescription = "PaceMark a besoin du GPS en arrière-plan pour vous guider vocalement pendant votre course, même quand le téléphone est dans votre poche.";
-				INFOPLIST_KEY_NSLocationAlwaysUsageDescription = "PaceMark a besoin du GPS en arrière-plan pour vous guider vocalement pendant votre course.";
-				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "PaceMark utilise le GPS pour détecter votre position et déclencher les annonces vocales aux jalons.";
 				INFOPLIST_KEY_UILaunchStoryboardName = LaunchScreen;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
@@ -486,9 +484,6 @@
 				INFOPLIST_FILE = Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = PaceMark;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.sports";
-				INFOPLIST_KEY_NSLocationAlwaysAndWhenInUseUsageDescription = "PaceMark a besoin du GPS en arrière-plan pour vous guider vocalement pendant votre course, même quand le téléphone est dans votre poche.";
-				INFOPLIST_KEY_NSLocationAlwaysUsageDescription = "PaceMark a besoin du GPS en arrière-plan pour vous guider vocalement pendant votre course.";
-				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "PaceMark utilise le GPS pour détecter votre position et déclencher les annonces vocales aux jalons.";
 				INFOPLIST_KEY_UILaunchStoryboardName = LaunchScreen;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
