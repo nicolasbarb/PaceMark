@@ -15,7 +15,7 @@ struct ImportAnalyticsReducer: Reducer {
                 telemetry.signal("Import.fileSelected", [:])
             }
 
-        case let .analysisCompleted(trail, trackPoints, _):
+        case let .parsingCompleted(trail, trackPoints):
             return .run { [telemetry] _ in
                 telemetry.signal("Import.parseSucceeded", [
                     "pointCount": "\(trackPoints.count)",

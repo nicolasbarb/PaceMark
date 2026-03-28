@@ -19,9 +19,13 @@ struct ImportStore {
         // Paywall
         @Presents var paywall: PaywallStore.State?
 
+        var profileAnimationFinished = false
+        var detectionFinished = false
+
         enum Phase: Equatable, Sendable {
             case upload
-            case analyzing
+            case analyzing      // Parsing GPX
+            case animatingProfile // Profile drawing with real data
             case result
         }
     }
@@ -33,8 +37,13 @@ struct ImportStore {
         case fileSelected(String) // URL path as String for Sendable
 
         // Analysis
-        case analysisCompleted(Trail, [TrackPoint], [Milestone])
+        case parsingCompleted(Trail, [TrackPoint])
+        case detectionCompleted([Milestone])
+        case profileAnimationFinished
         case importFailed(String)
+
+        // Debug
+        case debugReplayAnimation
 
         // Result phase
         case unlockTapped
@@ -70,6 +79,8 @@ struct ImportStore {
             case let .fileSelected(urlPath):
                 state.phase = .analyzing
                 state.error = nil
+                state.profileAnimationFinished = false
+                state.detectionFinished = false
                 let url = URL(fileURLWithPath: urlPath)
 
                 return .run { send in
@@ -90,7 +101,7 @@ struct ImportStore {
                             dPlus: dPlus
                         )
 
-                        // 3. Créer les track points (trailId sera assigné plus tard)
+                        // 3. Créer les track points
                         let trackPoints = parsedPoints.enumerated().map { index, point in
                             TrackPoint(
                                 id: nil,
@@ -103,13 +114,16 @@ struct ImportStore {
                             )
                         }
 
-                        // 4. Détecter les jalons (en mémoire)
+                        // 4. Send parsed data to start animation
+                        await send(.parsingCompleted(trail, trackPoints))
+
+                        // 5. Detect milestones in parallel with animation
                         let detectedMilestones = MilestoneDetector.detect(
                             from: trackPoints,
                             trailId: 0
                         )
 
-                        await send(.analysisCompleted(trail, trackPoints, detectedMilestones))
+                        await send(.detectionCompleted(detectedMilestones))
                     } catch let error as GPXParser.ParseError {
                         await send(.importFailed(error.localizedDescription))
                     } catch {
@@ -119,11 +133,32 @@ struct ImportStore {
 
             // MARK: - Analysis Result
 
-            case let .analysisCompleted(trail, trackPoints, milestones):
-                state.phase = .result
+            case let .parsingCompleted(trail, trackPoints):
                 state.parsedTrail = trail
                 state.parsedTrackPoints = trackPoints
+                state.phase = .animatingProfile
+                return .none
+
+            case let .detectionCompleted(milestones):
                 state.detectedMilestones = milestones
+                state.detectionFinished = true
+                // If animation already finished, go to result
+                if state.profileAnimationFinished {
+                    state.phase = .result
+                }
+                return .none
+
+            case .profileAnimationFinished:
+                state.profileAnimationFinished = true
+                // If detection already finished, go to result
+                if state.detectionFinished {
+                    state.phase = .result
+                }
+                return .none
+
+            case .debugReplayAnimation:
+                state.phase = .animatingProfile
+                state.profileAnimationFinished = false
                 return .none
 
             case let .importFailed(message):
