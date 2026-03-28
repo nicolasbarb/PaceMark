@@ -4,6 +4,10 @@ import UniformTypeIdentifiers
 
 struct ImportView: View {
     @Bindable var store: StoreOf<ImportStore>
+    @State private var animationToken = UUID()
+    @State private var pillsExiting = false
+    @State private var uploadContentFading = false
+    @State private var showProfileView = false
 
     var body: some View {
         NavigationStack {
@@ -15,24 +19,23 @@ struct ImportView: View {
                 )
                 .ignoresSafeArea()
 
-                switch store.phase {
-                case .upload:
+                if showProfileView {
+                    profileResultView
+                } else {
                     uploadPhaseView
-                case .analyzing:
-                    analyzingPhaseView
-                case .result:
-                    resultPhaseView
                 }
             }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("common.close", systemImage: "xmark", role: .cancel) {
-                        Haptic.light.trigger()
-                        store.send(.dismissTapped)
+                    if store.phase != .animatingProfile {
+                        Button("common.close", systemImage: "xmark", role: .cancel) {
+                            Haptic.light.trigger()
+                            store.send(.dismissTapped)
+                        }
                     }
                 }
             }
-            .toolbar(store.phase == .analyzing ? .hidden : .visible, for: .navigationBar)
+            .toolbar(.visible, for: .navigationBar)
             .navigationBarTitleDisplayMode(.inline)
         }
         .interactiveDismissDisabled(store.phase == .analyzing)
@@ -70,19 +73,21 @@ struct ImportView: View {
             trailPillsView
                 .padding(.top, 16)
 
-//            Spacer()
-
             // Texte centré
             VStack(spacing: 8) {
+                // Titre — disparaît en fondu
                 Text("import.upload.title")
                     .font(.title2.weight(.bold))
                     .foregroundStyle(TM.textPrimary)
                     .multilineTextAlignment(.center)
+                    .opacity(uploadContentFading ? 0 : 1)
 
-                Text("import.upload.subtitle")
+                // Sous-titre — se transforme en texte de loading
+                Text(uploadContentFading ? "import.phase.creatingProfile" : "import.upload.subtitle")
                     .font(.subheadline)
                     .foregroundStyle(TM.textMuted)
                     .multilineTextAlignment(.center)
+                    .contentTransition(.numericText())
 
                 // Error message
                 if let error = store.error {
@@ -97,21 +102,68 @@ struct ImportView: View {
 
             Spacer()
 
-            // CTA en bas
+            // CTA en bas — disparaît en fondu
             Button {
                 Haptic.medium.trigger()
                 store.send(.uploadZoneTapped)
             } label: {
                 Text("import.upload.cta")
+                    .opacity(store.phase == .analyzing ? 0 : 1)
+                    .overlay {
+                        if store.phase == .analyzing {
+                            ProgressView()
+                        }
+                    }
             }
             .primaryButton(size: .large, width: .flexible, shape: .capsule)
+            .disabled(store.phase == .analyzing)
             .padding(.horizontal, 24)
+            .opacity(uploadContentFading ? 0 : 1)
 
             Text("import.upload.sources")
                 .font(.caption)
                 .foregroundStyle(TM.textMuted)
                 .padding(.top, 10)
                 .padding(.bottom, 24)
+                .opacity(uploadContentFading ? 0 : 1)
+
+            #if DEBUG
+            if !uploadContentFading {
+                Button {
+                    startUploadExitAnimation()
+                } label: {
+                    Label("Test exit animation", systemImage: "arrow.right.to.line")
+                        .font(.caption)
+                }
+                .tertiaryButton(size: .mini, tint: TM.textMuted)
+                .padding(.bottom, 8)
+            }
+            #endif
+        }
+        .animation(.easeInOut(duration: 0.4), value: uploadContentFading)
+        .onChange(of: store.phase) { _, newPhase in
+            if newPhase == .animatingProfile {
+                startUploadExitAnimation()
+            }
+        }
+    }
+
+    private func startUploadExitAnimation() {
+        // Step 1: pills accelerate and exit
+        pillsExiting = true
+
+        // Step 2: after pills start moving, fade out title/button + transform subtitle
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(800))
+            uploadContentFading = true
+
+            // Step 3: after everything is gone, show profile
+            try? await Task.sleep(for: .milliseconds(600))
+            showProfileView = true
+
+            // Reset for potential re-use
+            pillsExiting = false
+            uploadContentFading = false
         }
     }
 
@@ -139,7 +191,8 @@ struct ImportView: View {
                     names: row,
                     reversed: config.reversed,
                     duration: config.duration,
-                    startOffset: config.startOffset
+                    startOffset: config.startOffset,
+                    exiting: pillsExiting
                 )
             }
         }
@@ -157,62 +210,204 @@ struct ImportView: View {
         )
     }
 
-    // MARK: - Analyzing Phase
+    // MARK: - Importing Phase
 
     private var analyzingPhaseView: some View {
-        VStack(spacing: 32) {
+        VStack(spacing: 16) {
             Spacer()
 
-            ProfileDrawingAnimation()
-                .frame(height: 80)
-                .padding(.horizontal, 40)
+            ProgressView()
+                .tint(TM.accent)
 
-            VStack(spacing: 8) {
-                Text("import.analyzing.title")
-                    .font(.headline)
-                    .foregroundStyle(TM.textPrimary)
-
-                Text("import.analyzing.subtitle")
-                    .font(.caption)
-                    .foregroundStyle(TM.textMuted)
-            }
+            Text("import.phase.importing")
+                .font(.subheadline)
+                .foregroundStyle(TM.textMuted)
 
             Spacer()
         }
     }
 
-    // MARK: - Result Phase
+    // MARK: - Unified Profile + Result View
+
+    private var isResult: Bool { store.phase == .result }
 
     private var hasMilestones: Bool {
         !store.detectedMilestones.isEmpty
     }
 
-    private var resultPhaseView: some View {
-        VStack(spacing: 0) {
-            // Header with sparkles
+    /// Phases for the profile → result transition animation
+    private enum ResultTransitionPhase: CaseIterable {
+        case idle       // Profile drawing in progress
+        case segments   // Colored segments fade in, analyzing text fades out
+        case milestones // Milestones appear one by one
+        case complete   // Header, buttons, explanation appear
+    }
+
+    @State private var transitionPhase: ResultTransitionPhase = .idle
+    @State private var visibleMilestoneCount: Int = 0
+
+    private var profileResultView: some View {
+        let showSegments = transitionPhase != .idle
+        let showMilestones = transitionPhase == .milestones || transitionPhase == .complete
+        let showContent = transitionPhase == .complete
+
+        return VStack(spacing: 0) {
+            // Header — fades in during .complete
             resultHeader
                 .padding(.top, 24)
                 .padding(.horizontal, 20)
+                .opacity(showContent ? 1 : 0)
 
-            // Elevation profile
-            elevationProfileSection
-                .padding(.top, 20)
+            // Profile — just below header
+            ZStack(alignment: .topTrailing) {
+                // Layer 1: Drawing animation (accent color)
+                RealProfileDrawingAnimation(
+                    trackPoints: store.parsedTrackPoints,
+                    onFinished: {
+                        store.send(.profileAnimationFinished)
+                    },
+                    restartToken: animationToken
+                )
+                .frame(height: 150)
+                .opacity(transitionPhase == .idle ? 1 : 0)
 
-            // Explanation text
-            if hasMilestones {
-                Text("import.result.explanation")
-                    .font(.caption)
-                    .foregroundStyle(TM.textMuted)
-                    .padding(.top, 12)
-                    .padding(.horizontal, 20)
+                // Layer 2: Colored profile WITHOUT milestones
+                ElevationProfilePreview(
+                    trackPoints: store.parsedTrackPoints,
+                    milestones: [],
+                    showMilestones: false
+                )
+                .frame(height: 150)
+                .opacity(showSegments ? 1 : 0)
+
+                // Layer 3: SwiftUI milestone markers (animated individually)
+                if showMilestones {
+                    MilestoneMarkersOverlay(
+                        trackPoints: store.parsedTrackPoints,
+                        milestones: store.detectedMilestones,
+                        visibleCount: visibleMilestoneCount
+                    )
+                    .frame(height: 150)
+                }
+
+                if !store.isPremium && hasMilestones {
+                    ProBadge()
+                        .padding(8)
+                        .opacity(showContent ? 1 : 0)
+                }
             }
+            .background(transitionPhase == .idle ? .clear : TM.bgSecondary)
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .padding(.horizontal, 20)
+            .padding(.top, 20)
+
+            // Phase text — changes at each step
+            Group {
+                switch transitionPhase {
+                case .idle:
+                    Text("import.phase.creatingProfile")
+                case .segments, .milestones:
+                    Text("import.phase.detectingMilestones")
+                case .complete:
+                    if hasMilestones {
+                        Text("import.result.explanation")
+                    } else {
+                        Color.clear.frame(height: 0)
+                    }
+                }
+            }
+            .font(.subheadline)
+            .foregroundStyle(TM.textMuted)
+            .padding(.top, 16)
+            .padding(.horizontal, 20)
+            .animation(.easeInOut(duration: 0.3), value: transitionPhase)
 
             Spacer()
 
-            // Action buttons
+            // Action buttons — fades in during .complete
             actionButtons
                 .padding(.horizontal, 20)
                 .padding(.bottom, 32)
+                .opacity(showContent ? 1 : 0)
+                .offset(y: showContent ? 0 : 20)
+
+            #if DEBUG
+            Button {
+                transitionPhase = .idle
+                visibleMilestoneCount = 0
+                store.send(.debugReplayAnimation)
+                animationToken = UUID()
+            } label: {
+                Label("Replay", systemImage: "arrow.counterclockwise")
+                    .font(.caption)
+            }
+            .tertiaryButton(size: .mini, tint: TM.textMuted)
+            .padding(.bottom, 8)
+            .opacity(showContent ? 1 : 0)
+            #endif
+        }
+        .onChange(of: isResult) { _, newValue in
+            if newValue {
+                startResultTransition()
+            } else {
+                transitionPhase = .idle
+                visibleMilestoneCount = 0
+                milestoneAnimationStartDate = nil
+            }
+        }
+        // TimelineView-driven milestone counter (frame-synced)
+        .overlay {
+            if transitionPhase == .milestones, let startDate = milestoneAnimationStartDate {
+                TimelineView(.animation) { timeline in
+                    let elapsed = timeline.date.timeIntervalSince(startDate)
+                    let progress = min(elapsed / totalMilestoneDuration, 1.0)
+                    let eased = 0.5 * (1 - cos(Double.pi * progress))
+                    let targetCount = Int(eased * Double(store.detectedMilestones.count))
+
+                    Color.clear
+                        .onChange(of: targetCount) { oldCount, newCount in
+                            if newCount > visibleMilestoneCount {
+                                visibleMilestoneCount = newCount
+                                Haptic.light.trigger()
+                            }
+                        }
+                        .onChange(of: progress >= 1.0) { _, finished in
+                            if finished {
+                                visibleMilestoneCount = store.detectedMilestones.count
+                                milestoneAnimationStartDate = nil
+                                withAnimation(.easeInOut(duration: 0.5)) {
+                                    transitionPhase = .complete
+                                }
+                            }
+                        }
+                }
+            }
+        }
+    }
+
+    @State private var milestoneAnimationStartDate: Date?
+    private let totalMilestoneDuration: Double = 1.5
+
+    private func startResultTransition() {
+        let milestoneCount = store.detectedMilestones.count
+
+        // Phase 1: colored segments appear, analyzing text fades
+        withAnimation(.easeInOut(duration: 0.6)) {
+            transitionPhase = .segments
+        }
+
+        if milestoneCount > 0 {
+            // Phase 2: start milestone animation after segments settle
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(700))
+                transitionPhase = .milestones
+                milestoneAnimationStartDate = Date()
+            }
+        } else {
+            // No milestones — skip to complete
+            withAnimation(.easeInOut(duration: 0.5).delay(0.7)) {
+                transitionPhase = .complete
+            }
         }
     }
 
@@ -252,29 +447,9 @@ struct ImportView: View {
         }
     }
 
-    private var elevationProfileSection: some View {
-        ZStack(alignment: .topTrailing) {
-            ElevationProfilePreview(
-                trackPoints: store.parsedTrackPoints,
-                milestones: store.detectedMilestones
-            )
-            .frame(height: 150)
-
-            // PRO badge for free users with detected milestones
-            if !store.isPremium && hasMilestones {
-                ProBadge()
-                    .padding(8)
-            }
-        }
-        .background(TM.bgSecondary)
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-        .padding(.horizontal, 20)
-    }
-
     @ViewBuilder
     private var actionButtons: some View {
         if !hasMilestones {
-            // No milestones detected - single button
             Button {
                 Haptic.medium.trigger()
                 store.send(.skipTapped)
@@ -283,7 +458,6 @@ struct ImportView: View {
             }
             .primaryButton(size: .large, width: .flexible, shape: .capsule)
         } else if store.isPremium {
-            // Premium user
             VStack(spacing: 12) {
                 Button {
                     Haptic.medium.trigger()
@@ -303,7 +477,6 @@ struct ImportView: View {
                 .tertiaryButton(size: .small, tint: .secondary)
             }
         } else {
-            // Free user
             VStack(spacing: 12) {
                 Button {
                     Haptic.medium.trigger()
@@ -349,28 +522,56 @@ private struct ScrollingPillRow: View {
     let reversed: Bool
     let duration: Double
     let startOffset: CGFloat
+    var exiting: Bool = false
 
     @State private var contentWidth: CGFloat = 0
+    @State private var exitStartTime: Date?
+    @State private var exitBaseOffset: CGFloat = 0
+
+    private let exitDuration: Double = 1.5
 
     var body: some View {
         GeometryReader { geo in
             TimelineView(.animation) { timeline in
-                let time = timeline.date.timeIntervalSinceReferenceDate
-                let progress = CGFloat(time.truncatingRemainder(dividingBy: duration)) / CGFloat(duration)
-                let shift = reversed
-                    ? -contentWidth + progress * contentWidth + startOffset
-                    : startOffset - progress * contentWidth
-
                 HStack(spacing: 8) {
                     pillContent
                     pillContent
                 }
                 .fixedSize()
-                .offset(x: shift)
+                .offset(x: computeShift(at: timeline.date, containerWidth: geo.size.width))
             }
         }
         .frame(height: 40)
         .clipped()
+        .onChange(of: exiting) { _, isExiting in
+            if isExiting {
+                let time = Date().timeIntervalSinceReferenceDate
+                let progress = CGFloat(time.truncatingRemainder(dividingBy: duration)) / CGFloat(duration)
+                exitBaseOffset = reversed
+                    ? -contentWidth + progress * contentWidth + startOffset
+                    : startOffset - progress * contentWidth
+                exitStartTime = Date()
+            } else {
+                exitStartTime = nil
+            }
+        }
+    }
+
+    private func computeShift(at date: Date, containerWidth: CGFloat) -> CGFloat {
+        if let exitStart = exitStartTime {
+            let elapsed = CGFloat(date.timeIntervalSince(exitStart))
+            let progress = min(elapsed / CGFloat(exitDuration), 1.0)
+            // Exponential ease-in: very slow at start, very fast at end
+            let eased = pow(progress, 5)
+            let exitDistance = (containerWidth + contentWidth * 2) * (reversed ? 1 : -1)
+            return exitBaseOffset + eased * exitDistance
+        } else {
+            let time = date.timeIntervalSinceReferenceDate
+            let progress = CGFloat(time.truncatingRemainder(dividingBy: duration)) / CGFloat(duration)
+            return reversed
+                ? -contentWidth + progress * contentWidth + startOffset
+                : startOffset - progress * contentWidth
+        }
     }
 
     private var pillContent: some View {
@@ -500,11 +701,133 @@ private struct ProfileDrawingAnimation: View {
     }
 }
 
+// MARK: - Real Profile Drawing Animation
+
+private struct RealProfileDrawingAnimation: View {
+    let trackPoints: [TrackPoint]
+    let onFinished: () -> Void
+
+    private let animationDuration: Double = 3.5
+    @State private var startTime: Date?
+    @State private var hasFinished = false
+    var restartToken: UUID = UUID()
+
+    var body: some View {
+        TimelineView(.animation) { timeline in
+            let progress = currentProgress(at: timeline.date)
+
+            Canvas { context, size in
+                drawRealProfile(context: context, size: size, progress: progress)
+            }
+            .task(id: progress >= 1.0) {
+                if progress >= 1.0 && !hasFinished {
+                    hasFinished = true
+                    onFinished()
+                }
+            }
+        }
+        .onAppear {
+            startTime = Date()
+        }
+        .onChange(of: restartToken) {
+            startTime = Date()
+            hasFinished = false
+        }
+    }
+
+    private func currentProgress(at date: Date) -> CGFloat {
+        guard let start = startTime else { return 0 }
+        let elapsed = date.timeIntervalSince(start)
+        return min(CGFloat(elapsed / animationDuration), 1.0)
+    }
+
+    private func drawRealProfile(context: GraphicsContext, size: CGSize, progress: CGFloat) {
+        guard trackPoints.count >= 2 else { return }
+
+        let padding: CGFloat = 10
+        let plotRect = CGRect(
+            x: padding, y: padding,
+            width: size.width - padding * 2,
+            height: size.height - padding * 2
+        )
+
+        let elevations = trackPoints.map(\.elevation)
+        let minEle = elevations.min() ?? 0
+        let maxEle = elevations.max() ?? 0
+        let eleRange = max(maxEle - minEle, 1)
+        let maxDist = trackPoints.last?.distance ?? 1
+
+        // Downsample for performance (max ~200 points)
+        let step = max(1, trackPoints.count / 200)
+        let sampled = stride(from: 0, to: trackPoints.count, by: step).map { trackPoints[$0] }
+
+        let points = sampled.map { pt -> CGPoint in
+            let x = plotRect.minX + CGFloat(pt.distance / maxDist) * plotRect.width
+            let y = plotRect.maxY - CGFloat((pt.elevation - minEle) / eleRange) * plotRect.height
+            return CGPoint(x: x, y: y)
+        }
+
+        let cursorX = plotRect.minX + progress * plotRect.width
+
+        // Draw segments in accent color
+        for i in 1..<points.count {
+            let p0 = points[i - 1]
+            let p1 = points[i]
+
+            guard p0.x <= cursorX else { break }
+
+            let clippedEnd: CGPoint
+            if p1.x <= cursorX {
+                clippedEnd = p1
+            } else {
+                let t = (cursorX - p0.x) / (p1.x - p0.x)
+                clippedEnd = CGPoint(x: cursorX, y: p0.y + t * (p1.y - p0.y))
+            }
+
+            // Fill under the segment
+            var fillPath = Path()
+            fillPath.move(to: CGPoint(x: p0.x, y: plotRect.maxY))
+            fillPath.addLine(to: p0)
+            fillPath.addLine(to: clippedEnd)
+            fillPath.addLine(to: CGPoint(x: clippedEnd.x, y: plotRect.maxY))
+            fillPath.closeSubpath()
+            context.fill(fillPath, with: .color(TM.accent.opacity(0.1)))
+
+            // Line
+            var linePath = Path()
+            linePath.move(to: p0)
+            linePath.addLine(to: clippedEnd)
+            context.stroke(
+                linePath,
+                with: .color(TM.accent),
+                style: StrokeStyle(lineWidth: 2.5, lineCap: .round, lineJoin: .round)
+            )
+        }
+
+        // Cursor glow (only while animating)
+        if progress < 1.0 {
+            let cursorY: CGFloat
+            if let lastVisible = points.last(where: { $0.x <= cursorX }) {
+                cursorY = lastVisible.y
+            } else {
+                cursorY = plotRect.midY
+            }
+
+            let glowRect = CGRect(x: cursorX - 10, y: cursorY - 10, width: 20, height: 20)
+            context.fill(Path(ellipseIn: glowRect), with: .color(TM.accent.opacity(0.25)))
+
+            let dotRect = CGRect(x: cursorX - 4, y: cursorY - 4, width: 8, height: 8)
+            context.fill(Path(ellipseIn: dotRect), with: .color(TM.accent))
+        }
+    }
+}
+
 // MARK: - Elevation Profile Preview
 
 private struct ElevationProfilePreview: View {
     let trackPoints: [TrackPoint]
     let milestones: [Milestone]
+    var showMilestones: Bool = true
 
     private let paddingTop: CGFloat = 10
     private let paddingBottom: CGFloat = 10
@@ -534,14 +857,13 @@ private struct ElevationProfilePreview: View {
         let eleRange = max(maxEle - minEle, 1)
         let maxDist = trackPoints.last?.distance ?? 1
 
-        // Use shared ElevationProfileAnalyzer
         let terrainTypes = ElevationProfileAnalyzer.classify(trackPoints: trackPoints)
 
-        // Draw colored segments
         drawColoredSegments(context: context, plotRect: plotRect, minEle: minEle, eleRange: eleRange, maxDist: maxDist, terrainTypes: terrainTypes)
 
-        // Draw milestone markers
-        drawMilestones(context: context, plotRect: plotRect, minEle: minEle, eleRange: eleRange, maxDist: maxDist)
+        if showMilestones {
+            drawMilestones(context: context, plotRect: plotRect, minEle: minEle, eleRange: eleRange, maxDist: maxDist)
+        }
     }
 
     private func drawColoredSegments(context: GraphicsContext, plotRect: CGRect, minEle: Double, eleRange: Double, maxDist: Double, terrainTypes: [TerrainType]) {
@@ -557,7 +879,6 @@ private struct ElevationProfilePreview: View {
             let x2 = plotRect.minX + CGFloat(currPoint.distance / maxDist) * plotRect.width
             let y2 = plotRect.maxY - CGFloat((currPoint.elevation - minEle) / eleRange) * plotRect.height
 
-            // Draw fill for this segment
             var fillPath = Path()
             fillPath.move(to: CGPoint(x: x1, y: plotRect.maxY))
             fillPath.addLine(to: CGPoint(x: x1, y: y1))
@@ -567,7 +888,6 @@ private struct ElevationProfilePreview: View {
 
             context.fill(fillPath, with: .color(terrain.color.opacity(0.2)))
 
-            // Draw line for this segment
             var linePath = Path()
             linePath.move(to: CGPoint(x: x1, y: y1))
             linePath.addLine(to: CGPoint(x: x2, y: y2))
@@ -581,25 +901,115 @@ private struct ElevationProfilePreview: View {
             let x = plotRect.minX + CGFloat(milestone.distance / maxDist) * plotRect.width
             let y = plotRect.maxY - CGFloat((milestone.elevation - minEle) / eleRange) * plotRect.height
 
-            // Dashed line down
             var dashPath = Path()
             dashPath.move(to: CGPoint(x: x, y: y))
             dashPath.addLine(to: CGPoint(x: x, y: plotRect.maxY))
             context.stroke(dashPath, with: .color(TM.accent.opacity(0.4)), style: StrokeStyle(lineWidth: 1, dash: [3, 2]))
 
-            // Circle background
             let circleRect = CGRect(x: x - 5, y: y - 5, width: 10, height: 10)
             context.fill(Path(ellipseIn: circleRect), with: .color(milestone.milestoneType.color))
-
-            // Circle border
             context.stroke(Path(ellipseIn: circleRect), with: .color(TM.bgPrimary), lineWidth: 1.5)
 
-            // Number
             let text = Text("\(index + 1)")
                 .font(.system(size: 6, weight: .bold, design: .monospaced))
                 .foregroundStyle(.white)
             context.draw(text, at: CGPoint(x: x, y: y), anchor: .center)
         }
+    }
+}
+
+// MARK: - Milestone Markers Overlay (SwiftUI views for animated appearance)
+
+private struct MilestoneMarkersOverlay: View {
+    let trackPoints: [TrackPoint]
+    let milestones: [Milestone]
+    let visibleCount: Int
+
+    private let padding: CGFloat = 10
+
+    var body: some View {
+        GeometryReader { geo in
+            let plotRect = CGRect(
+                x: padding, y: padding,
+                width: geo.size.width - padding * 2,
+                height: geo.size.height - padding * 2
+            )
+            let elevations = trackPoints.map(\.elevation)
+            let minEle = elevations.min() ?? 0
+            let maxEle = elevations.max() ?? 0
+            let eleRange = max(maxEle - minEle, 1)
+            let maxDist = trackPoints.last?.distance ?? 1
+
+            ForEach(Array(milestones.prefix(visibleCount).enumerated()), id: \.offset) { index, milestone in
+                let x = plotRect.minX + CGFloat(milestone.distance / maxDist) * plotRect.width
+                let y = plotRect.maxY - CGFloat((milestone.elevation - minEle) / eleRange) * plotRect.height
+
+                MilestoneMarkerView(
+                    color: milestone.milestoneType.color,
+                    index: index + 1
+                )
+                .position(x: x, y: y)
+            }
+        }
+    }
+}
+
+private struct MilestoneMarkerView: View {
+    let color: Color
+    let index: Int
+
+    @State private var appeared = false
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .fill(color)
+                .frame(width: 12, height: 12)
+
+            Circle()
+                .strokeBorder(Color.white, lineWidth: 1.5)
+                .frame(width: 12, height: 12)
+
+            Text("\(index)")
+                .font(.system(size: 6, weight: .bold, design: .monospaced))
+                .foregroundStyle(.white)
+        }
+        .scaleEffect(appeared ? 1 : 0)
+        .opacity(appeared ? 1 : 0)
+        .onAppear {
+            withAnimation(.spring(duration: 0.35, bounce: 0.4)) {
+                appeared = true
+            }
+        }
+    }
+}
+
+// MARK: - Preview Helpers
+
+@MainActor
+private func loadPreviewGPX() -> (Trail, [TrackPoint], [Milestone]) {
+    guard let url = Bundle.main.url(forResource: "utmb-preview", withExtension: "gpx") else {
+        return (Trail(id: nil, name: "Preview", distance: 0, dPlus: 0), [], [])
+    }
+    do {
+        let (parsedPoints, dPlus) = try GPXParser.parse(url: url)
+        let trail = Trail(
+            id: nil,
+            name: GPXParser.trailName(from: url),
+            distance: parsedPoints.last?.distance ?? 0,
+            dPlus: dPlus
+        )
+        let trackPoints = parsedPoints.enumerated().map { index, point in
+            TrackPoint(
+                id: nil, trailId: 0, index: index,
+                latitude: point.latitude, longitude: point.longitude,
+                elevation: point.elevation, distance: point.distance
+            )
+        }
+        let milestones = MilestoneDetector.detect(from: trackPoints, trailId: 0)
+        return (trail, trackPoints, milestones)
+    } catch {
+        return (Trail(id: nil, name: "Preview", distance: 0, dPlus: 0), [], [])
     }
 }
 
@@ -611,7 +1021,7 @@ private struct ElevationProfilePreview: View {
     )
 }
 
-#Preview("Analyzing") {
+#Preview("Upload - Loading") {
     ImportView(
         store: Store(
             initialState: ImportStore.State(phase: .analyzing)
@@ -621,25 +1031,41 @@ private struct ElevationProfilePreview: View {
     )
 }
 
-#Preview("Result - Free") {
+#Preview("Animation → Result") {
+    let (trail, trackPoints, milestones) = loadPreviewGPX()
     ImportView(
         store: Store(
-            initialState: ImportStore.State(
-                phase: .result,
-                parsedTrail: Trail(
-                    id: nil,
-                    name: "Col de la Croix",
-                    createdAt: Date(),
-                    distance: 12400,
-                    dPlus: 620
-                ),
-                parsedTrackPoints: [],
-                detectedMilestones: [
-                    Milestone(trailId: 0, pointIndex: 0, latitude: 0, longitude: 0, elevation: 100, distance: 0, type: .climb, message: "Test"),
-                    Milestone(trailId: 0, pointIndex: 100, latitude: 0, longitude: 0, elevation: 500, distance: 5000, type: .descent, message: "Test")
-                ],
-                isPremium: false
-            )
+            initialState: {
+                var state = ImportStore.State(
+                    phase: .animatingProfile,
+                    parsedTrail: trail,
+                    parsedTrackPoints: trackPoints,
+                    detectedMilestones: milestones
+                )
+                state.detectionFinished = true
+                return state
+            }()
+        ) {
+            ImportStore()
+        }
+    )
+}
+
+#Preview("Result - Free") {
+    let (trail, trackPoints, milestones) = loadPreviewGPX()
+    ImportView(
+        store: Store(
+            initialState: {
+                var state = ImportStore.State(
+                    phase: .result,
+                    parsedTrail: trail,
+                    parsedTrackPoints: trackPoints,
+                    detectedMilestones: milestones
+                )
+                state.profileAnimationFinished = true
+                state.detectionFinished = true
+                return state
+            }()
         ) {
             ImportStore()
         }
@@ -647,24 +1073,21 @@ private struct ElevationProfilePreview: View {
 }
 
 #Preview("Result - Premium") {
+    let (trail, trackPoints, milestones) = loadPreviewGPX()
     ImportView(
         store: Store(
-            initialState: ImportStore.State(
-                phase: .result,
-                parsedTrail: Trail(
-                    id: nil,
-                    name: "Col de la Croix",
-                    createdAt: Date(),
-                    distance: 12400,
-                    dPlus: 620
-                ),
-                parsedTrackPoints: [],
-                detectedMilestones: [
-                    Milestone(trailId: 0, pointIndex: 0, latitude: 0, longitude: 0, elevation: 100, distance: 0, type: .climb, message: "Test"),
-                    Milestone(trailId: 0, pointIndex: 100, latitude: 0, longitude: 0, elevation: 500, distance: 5000, type: .descent, message: "Test")
-                ],
-                isPremium: true
-            )
+            initialState: {
+                var state = ImportStore.State(
+                    phase: .result,
+                    parsedTrail: trail,
+                    parsedTrackPoints: trackPoints,
+                    detectedMilestones: milestones,
+                    isPremium: true
+                )
+                state.profileAnimationFinished = true
+                state.detectionFinished = true
+                return state
+            }()
         ) {
             ImportStore()
         }

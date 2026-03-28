@@ -110,37 +110,64 @@ struct ImportStoreTests {
     // MARK: - Analysis Phase
 
     @Test
-    func analysisCompleted_transitionsToResult() async {
+    func parsingCompleted_transitionsToAnimatingProfile() async {
         let trail = Self.makeTrail()
         let trackPoints = Self.makeTrackPoints()
-        let milestones = Self.makeMilestones()
 
         let store = TestStore(initialState: ImportStore.State(phase: .analyzing)) {
             ImportStore()
         }
 
-        await store.send(.analysisCompleted(trail, trackPoints, milestones)) {
-            $0.phase = .result
+        await store.send(.parsingCompleted(trail, trackPoints)) {
+            $0.phase = .animatingProfile
             $0.parsedTrail = trail
             $0.parsedTrackPoints = trackPoints
-            $0.detectedMilestones = milestones
         }
     }
 
     @Test
-    func analysisCompleted_withNoMilestones() async {
-        let trail = Self.makeTrail()
-        let trackPoints = Self.makeTrackPoints()
+    func detectionThenAnimation_transitionsToResult() async {
+        let milestones = Self.makeMilestones()
 
-        let store = TestStore(initialState: ImportStore.State(phase: .analyzing)) {
+        var initialState = ImportStore.State(phase: .animatingProfile)
+        initialState.parsedTrail = Self.makeTrail()
+        initialState.parsedTrackPoints = Self.makeTrackPoints()
+
+        let store = TestStore(initialState: initialState) {
             ImportStore()
         }
 
-        await store.send(.analysisCompleted(trail, trackPoints, [])) {
+        await store.send(.detectionCompleted(milestones)) {
+            $0.detectedMilestones = milestones
+            $0.detectionFinished = true
+        }
+
+        await store.send(.profileAnimationFinished) {
+            $0.profileAnimationFinished = true
             $0.phase = .result
-            $0.parsedTrail = trail
-            $0.parsedTrackPoints = trackPoints
-            $0.detectedMilestones = []
+        }
+    }
+
+    @Test
+    func animationThenDetection_transitionsToResult() async {
+        let milestones = Self.makeMilestones()
+
+        var initialState = ImportStore.State(phase: .animatingProfile)
+        initialState.parsedTrail = Self.makeTrail()
+        initialState.parsedTrackPoints = Self.makeTrackPoints()
+
+        let store = TestStore(initialState: initialState) {
+            ImportStore()
+        }
+
+        await store.send(.profileAnimationFinished) {
+            $0.profileAnimationFinished = true
+        }
+
+        await store.send(.detectionCompleted(milestones)) {
+            $0.detectedMilestones = milestones
+            $0.detectionFinished = true
+            $0.phase = .result
         }
     }
 
