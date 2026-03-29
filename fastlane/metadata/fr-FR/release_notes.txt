@@ -1,0 +1,10 @@
+Nouveautés :
+- Application entièrement traduite en anglais et français
+- Écran d'import entièrement repensé et amélioré
+- Nouvel écran de réglages avec choix de la langue
+- Annonces vocales auto-générées pour les terrains plats
+
+Corrections :
+- Meilleure classification du terrain sur les données complètes
+- Correction de l'affichage des erreurs à l'import
+- Corrections de style et d'alignement sur l'écran de résultat

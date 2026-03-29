@@ -232,10 +232,12 @@ platform :ios do
 
   # ==================== OTHER LANES ====================
 
-  desc "Push metadata (description, keywords, etc.) to App Store Connect"
-  lane :metadata do
+  desc "Push metadata (description, keywords, etc.) to App Store Connect. Use version:x.y.z to target a specific version."
+  lane :metadata do |options|
+    version = options[:version] || read_marketing_version
     deliver(
       api_key: asc_api_key,
+      app_version: version,
       skip_binary_upload: true,
       skip_screenshots: true,
       force: true,

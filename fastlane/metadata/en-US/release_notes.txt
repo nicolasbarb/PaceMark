@@ -1,0 +1,10 @@
+What's new:
+- Full English and French localization
+- Completely redesigned and improved import screen
+- New settings screen with language selection
+- Auto-generated voice announcements for flat terrain
+
+Fixes:
+- Better terrain classification on full data
+- Fixed error display on import screen
+- Style and alignment fixes on result screen
