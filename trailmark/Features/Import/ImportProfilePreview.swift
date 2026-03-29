@@ -35,21 +35,27 @@ struct ElevationProfilePreview: View {
         let eleRange = max(maxEle - minEle, 1)
         let maxDist = trackPoints.last?.distance ?? 1
 
+        // Classify on full data, then downsample for drawing performance
         let terrainTypes = ElevationProfileAnalyzer.classify(trackPoints: trackPoints)
 
-        drawColoredSegments(context: context, plotRect: plotRect, minEle: minEle, eleRange: eleRange, maxDist: maxDist, terrainTypes: terrainTypes)
+        let step = max(1, trackPoints.count / 300)
+        let sampledIndices = Array(stride(from: 0, to: trackPoints.count, by: step))
+        let sampledPoints = sampledIndices.map { trackPoints[$0] }
+        let sampledTerrains = sampledIndices.map { terrainTypes[$0] }
+
+        drawColoredSegments(context: context, plotRect: plotRect, minEle: minEle, eleRange: eleRange, maxDist: maxDist, points: sampledPoints, terrainTypes: sampledTerrains)
 
         if showMilestones {
             drawMilestones(context: context, plotRect: plotRect, minEle: minEle, eleRange: eleRange, maxDist: maxDist)
         }
     }
 
-    private func drawColoredSegments(context: GraphicsContext, plotRect: CGRect, minEle: Double, eleRange: Double, maxDist: Double, terrainTypes: [TerrainType]) {
-        guard trackPoints.count >= 2 else { return }
+    private func drawColoredSegments(context: GraphicsContext, plotRect: CGRect, minEle: Double, eleRange: Double, maxDist: Double, points: [TrackPoint], terrainTypes: [TerrainType]) {
+        guard points.count >= 2 else { return }
 
-        for i in 1..<trackPoints.count {
-            let prevPoint = trackPoints[i - 1]
-            let currPoint = trackPoints[i]
+        for i in 1..<points.count {
+            let prevPoint = points[i - 1]
+            let currPoint = points[i]
             let terrain = terrainTypes[i]
 
             let x1 = plotRect.minX + CGFloat(prevPoint.distance / maxDist) * plotRect.width

@@ -343,9 +343,9 @@ struct ImportView: View {
                 )
                 .frame(height: 150)
 
-                // Layer 2: Colored profile fades in ON TOP of accent profile
+                // Layer 2: Colored profile fades in ON TOP (full data for correct classification)
                 ElevationProfilePreview(
-                    trackPoints: downsampledTrackPoints,
+                    trackPoints: store.parsedTrackPoints,
                     milestones: [],
                     showMilestones: false
                 )
